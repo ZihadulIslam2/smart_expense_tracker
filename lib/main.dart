@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:smart_expense_tracker/core/init/appwrite_client.dart';
 import 'package:smart_expense_tracker/features/auth/login_screen.dart';
 import 'package:smart_expense_tracker/features/auth/register_screen.dart';
 import 'package:smart_expense_tracker/features/dashboard/dashboard_screen.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  AppwriteClient.init();
   runApp(const MyApp());
 }
 
