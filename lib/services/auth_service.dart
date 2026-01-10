@@ -1,4 +1,5 @@
 import 'package:appwrite/appwrite.dart';
+import 'package:appwrite/models.dart' as models;
 import '../core/init/appwrite_client.dart';
 
 class AuthService {
@@ -50,13 +51,22 @@ class AuthService {
     }
   }
 
-  // Check if a session is already active
   Future<bool> hasActiveSession() async {
     try {
       await account.get();
       return true;
     } on AppwriteException {
       return false;
+    }
+  }
+
+  // NEW: Fetch current user info (name, email, etc.)
+  Future<models.User?> getCurrentUser() async {
+    try {
+      final user = await account.get();
+      return user;
+    } on AppwriteException {
+      return null;
     }
   }
 }
