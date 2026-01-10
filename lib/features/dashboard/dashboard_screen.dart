@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:appwrite/models.dart' as models;
+import 'package:appwrite/appwrite.dart';
 import '../../services/auth_service.dart';
+import '../expenses/services/expense_service.dart';
+import '../expenses/screens/add_expense_screen.dart';
+import '../../core/init/appwrite_client.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -50,6 +54,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Future<void> _navigateToAddExpense() async {
+    if (_user == null) return;
+
+    // Use the existing Appwrite client
+    final databases = Databases(AppwriteClient.client);
+    final expenseService = ExpenseService(
+      databases: databases,
+      databaseId: '143973bc-3217-4b7e-a1ca-05082dfde404', // Replace with your database ID
+      collectionId: '6962b3c600110543e89f', // Replace with your collection ID
+    );
+
+    // Navigate to Add Expense Screen
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AddExpenseScreen(
+          userId: _user!.$id,
+          expenseService: expenseService,
+        ),
+      ),
+    );
+
+    // Refresh dashboard if expense was added
+    if (result == true && mounted) {
+      // TODO: Refresh transactions list
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Transaction added successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final name = _user?.name?.isNotEmpty == true ? _user!.name! : 'User';
@@ -93,7 +131,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () {},
+                      onPressed: _navigateToAddExpense,
                       child: const Text('Add Expense'),
                     ),
                   ),
