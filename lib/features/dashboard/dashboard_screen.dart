@@ -18,6 +18,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final _authService = AuthService();
   models.User? _user;
   bool _loading = true;
+  double _totalIncome = 0.0;
+  double _totalExpense = 0.0;
+  bool _loadingTotals = false;
+  late ExpenseService _expenseService;
 
   @override
   void initState() {
@@ -39,6 +43,65 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _user = user;
         _loading = false;
       });
+
+      // Initialize ExpenseService
+      if (user != null) {
+        _initializeExpenseService();
+        // Fetch totals after user is set
+        _fetchTotals();
+      }
+    }
+  }
+
+  void _initializeExpenseService() {
+    final databases = Databases(AppwriteClient.client);
+    _expenseService = ExpenseService(
+      databases: databases,
+      databaseId: '143973bc-3217-4b7e-a1ca-05082dfde404',
+      collectionId: '6962b3c600110543e89f',
+    );
+  }
+
+  Future<void> _fetchTotals() async {
+    if (_user == null) return;
+
+    setState(() {
+      _loadingTotals = true;
+    });
+
+    try {
+      // Fetch all transactions for the user
+      final transactions = await _expenseService.getUserTransactions(
+        userId: _user!.$id,
+      );
+
+      // Calculate totals
+      double totalIncome = 0.0;
+      double totalExpense = 0.0;
+
+      // Loop through each transaction
+      for (var transaction in transactions) {
+        if (transaction.type == 'income') {
+          totalIncome += transaction.amount;
+        } else if (transaction.type == 'expense') {
+          totalExpense += transaction.amount;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _totalIncome = totalIncome;
+          _totalExpense = totalExpense;
+          _loadingTotals = false;
+        });
+      }
+    } catch (e) {
+      print('Error fetching totals: $e');
+      if (mounted) {
+        setState(() {
+          _loadingTotals = false;
+        });
+      }
     }
   }
 
@@ -80,7 +143,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     // Refresh dashboard if expense was added
     if (result == true && mounted) {
-      // TODO: Refresh transactions list
+      // Refresh totals when a new expense is added
+      _fetchTotals();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Transaction added successfully!'),
@@ -93,12 +157,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _navigateToTransactionList() async {
     if (_user == null) return;
 
-    Navigator.push(
+    // Navigate and wait for return
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => ExpenseListScreen(userId: _user!.$id),
       ),
     );
+
+    // Refresh totals when returning from transaction list
+    if (mounted) {
+      _fetchTotals();
+    }
   }
 
   @override
@@ -131,14 +201,106 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    'Total Expense: 0 BDT',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  // Total Expense Card
+                  Card(
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Total Expense',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              _loadingTotals
+                                  ? SizedBox(
+                                      height: 24,
+                                      width: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                              Colors.red[400]!,
+                                            ),
+                                      ),
+                                    )
+                                  : Text(
+                                      '৳ ${_totalExpense.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.red,
+                                      ),
+                                    ),
+                            ],
+                          ),
+                          Icon(
+                            Icons.arrow_upward,
+                            color: Colors.red[400],
+                            size: 32,
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 12),
-                  const Text(
-                    'Total Income: 0 BDT',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  // Total Income Card
+                  Card(
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Total Income',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              _loadingTotals
+                                  ? SizedBox(
+                                      height: 24,
+                                      width: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                              Colors.green[400]!,
+                                            ),
+                                      ),
+                                    )
+                                  : Text(
+                                      '৳ ${_totalIncome.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.green,
+                                      ),
+                                    ),
+                            ],
+                          ),
+                          Icon(
+                            Icons.arrow_downward,
+                            color: Colors.green[400],
+                            size: 32,
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 24),
                   SizedBox(
