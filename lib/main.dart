@@ -4,9 +4,12 @@ import 'package:smart_expense_tracker/features/auth/login_screen.dart';
 import 'package:smart_expense_tracker/features/auth/register_screen.dart';
 import 'package:smart_expense_tracker/features/dashboard/dashboard_screen.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   AppwriteClient.init();
+  await AppwriteClient.checkServerHealth();
+  // Optionally check current user session (will error if not logged in)
+  // await AppwriteClient.checkCurrentUser();
   runApp(const MyApp());
 }
 
