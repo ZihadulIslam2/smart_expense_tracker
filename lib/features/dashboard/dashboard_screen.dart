@@ -27,6 +27,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   late AnalyticsService _analyticsService;
   Map<String, double> _categorySpending = {};
   bool _loadingCategories = false;
+  List<Map<String, dynamic>> _monthlyTrend = [];
+  bool _loadingTrend = false;
+  String _insight = '';
 
   @override
   void initState() {
@@ -52,9 +55,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // Initialize ExpenseService
       if (user != null) {
         _initializeExpenseService();
-        // Fetch totals and category spending after user is set
+        // Fetch totals, category spending, and monthly trend after user is set
         _fetchTotals();
         _fetchCategorySpending();
+        _fetchMonthlyTrend();
       }
     }
   }
@@ -120,8 +124,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
 
     try {
-      final spending =
-          await _analyticsService.getCategoryWiseSpending(userId: _user!.$id);
+      final spending = await _analyticsService.getCategoryWiseSpending(
+        userId: _user!.$id,
+      );
 
       if (mounted) {
         setState(() {
@@ -134,6 +139,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (mounted) {
         setState(() {
           _loadingCategories = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _fetchMonthlyTrend() async {
+    if (_user == null) return;
+
+    setState(() {
+      _loadingTrend = true;
+    });
+
+    try {
+      final trend = await _analyticsService.getSpendingTrend(
+        userId: _user!.$id,
+        months: 6,
+      );
+
+      if (mounted) {
+        setState(() {
+          _monthlyTrend = trend;
+          _loadingTrend = false;
+        });
+      }
+    } catch (e) {
+      print('Error fetching monthly trend: $e');
+      if (mounted) {
+        setState(() {
+          _loadingTrend = false;
         });
       }
     }
@@ -177,9 +211,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     // Refresh dashboard if expense was added
     if (result == true && mounted) {
-      // Refresh totals and category spending when a new expense is added
+      // Refresh all dashboard data when a new expense is added
       _fetchTotals();
       _fetchCategorySpending();
+      _fetchMonthlyTrend();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Transaction added successfully!'),
@@ -200,10 +235,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
 
-    // Refresh totals and category spending when returning from transaction list
+    // Refresh all data when returning from transaction list
     if (mounted) {
       _fetchTotals();
       _fetchCategorySpending();
+      _fetchMonthlyTrend();
     }
   }
 
@@ -220,8 +256,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       Colors.indigo,
     ];
 
-    final total =
-        _categorySpending.values.fold(0.0, (sum, amount) => sum + amount);
+    final total = _categorySpending.values.fold(
+      0.0,
+      (sum, amount) => sum + amount,
+    );
 
     List<PieChartSectionData> sections = [];
     int colorIndex = 0;
@@ -295,6 +333,89 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  /// Get maximum Y value for bar chart
+  double _getMaxYValue() {
+    if (_monthlyTrend.isEmpty) return 10000;
+
+    double max = 0;
+    for (var month in _monthlyTrend) {
+      final income = (month['income'] as num).toDouble();
+      final expense = (month['expense'] as num).toDouble();
+      if (income > max) max = income;
+      if (expense > max) max = expense;
+    }
+
+    return max * 1.2; // Add 20% padding
+  }
+
+  /// Generate spending insights
+  String _generateInsights() {
+    if (_categorySpending.isEmpty) {
+      return 'No expenses yet. Start tracking your spending!';
+    }
+
+    // Find the category with highest spending
+    String topCategory = '';
+    double maxAmount = 0;
+
+    _categorySpending.forEach((category, amount) {
+      if (amount > maxAmount) {
+        maxAmount = amount;
+        topCategory = category;
+      }
+    });
+
+    // Calculate percentage
+    final totalExpense = _categorySpending.values.fold(
+      0.0,
+      (sum, a) => sum + a,
+    );
+    final percentage = (maxAmount / totalExpense) * 100;
+
+    // Calculate savings
+    final savings = _totalIncome - _totalExpense;
+    final savingsPercentage = _totalIncome > 0
+        ? ((savings / _totalIncome) * 100).toStringAsFixed(1)
+        : '0';
+
+    if (savings >= 0) {
+      return 'Great job! You\'re saving ৳${savings.toStringAsFixed(2)} (${savingsPercentage}% of income). '
+          'Your highest spending is on $topCategory (${percentage.toStringAsFixed(1)}%).';
+    } else {
+      return 'You spent ৳${_totalExpense.toStringAsFixed(2)}. '
+          'Your top expense is $topCategory (${percentage.toStringAsFixed(1)}%). '
+          'Try reducing spending to increase savings.';
+    }
+  }
+
+  /// Build bar groups for monthly chart
+  List<BarChartGroupData> _buildBarGroups() {
+    return List.generate(_monthlyTrend.length, (index) {
+      final monthData = _monthlyTrend[index];
+      final income = (monthData['income'] as num).toDouble();
+      final expense = (monthData['expense'] as num).toDouble();
+
+      return BarChartGroupData(
+        x: index,
+        barRods: [
+          BarChartRodData(
+            toY: income,
+            color: Colors.green[400],
+            width: 12,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+          ),
+          BarChartRodData(
+            toY: expense,
+            color: Colors.red[400],
+            width: 12,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+          ),
+        ],
+        barsSpace: 4,
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final name = _user?.name?.isNotEmpty == true ? _user!.name! : 'User';
@@ -312,7 +433,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : Padding(
+          : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -426,54 +547,269 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  // Category-wise Spending Pie Chart
-                  if (_categorySpending.isNotEmpty)
-                    Card(
-                      elevation: 2,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Spending by Category',
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
+                  const SizedBox(height: 12),
+                  // Total Savings Card
+                  Card(
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Total Savings',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 16),
-                            _loadingCategories
-                                ? SizedBox(
-                                    height: 250,
-                                    child: Center(
+                              const SizedBox(height: 8),
+                              _loadingTotals
+                                  ? SizedBox(
+                                      height: 24,
+                                      width: 24,
                                       child: CircularProgressIndicator(
+                                        strokeWidth: 2,
                                         valueColor:
                                             AlwaysStoppedAnimation<Color>(
                                               Colors.blue[400]!,
                                             ),
                                       ),
+                                    )
+                                  : Text(
+                                      '৳ ${(_totalIncome - _totalExpense).toStringAsFixed(2)}',
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color:
+                                            (_totalIncome - _totalExpense) >= 0
+                                            ? Colors.blue
+                                            : Colors.orange,
+                                      ),
                                     ),
-                                  )
-                                : SizedBox(
-                                    height: 250,
-                                    child: PieChart(
-                                      PieChartData(
-                                        sections: _buildPieSections(),
-                                        centerSpaceRadius: 40,
-                                        sectionsSpace: 2,
+                            ],
+                          ),
+                          Icon(
+                            (_totalIncome - _totalExpense) >= 0
+                                ? Icons.trending_up
+                                : Icons.trending_down,
+                            color: (_totalIncome - _totalExpense) >= 0
+                                ? Colors.blue[400]
+                                : Colors.orange[400],
+                            size: 32,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  // Insights Card
+                  Card(
+                    elevation: 2,
+                    color: Colors.blue[50],
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.lightbulb_outline,
+                                color: Colors.amber[600],
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Insights',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            _generateInsights(),
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[700],
+                              height: 1.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  // Category-wise Spending Pie Chart (with empty state)
+                  Card(
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Spending by Category',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          if (_loadingCategories)
+                            SizedBox(
+                              height: 250,
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.blue[400]!,
+                                  ),
+                                ),
+                              ),
+                            )
+                          else if (_categorySpending.isEmpty)
+                            SizedBox(
+                              height: 60,
+                              child: Center(
+                                child: Text(
+                                  'No expense data yet. Add expenses to see the chart.',
+                                  style: TextStyle(color: Colors.grey[600]),
+                                ),
+                              ),
+                            )
+                          else
+                            SizedBox(
+                              height: 250,
+                              child: PieChart(
+                                PieChartData(
+                                  sections: _buildPieSections(),
+                                  centerSpaceRadius: 40,
+                                  sectionsSpace: 2,
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: 16),
+                          if (_categorySpending.isNotEmpty)
+                            _buildCategoryLegend(),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  // Monthly Income vs Expense Bar Chart
+                  Card(
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Monthly Income vs Expense',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          if (_loadingTrend)
+                            SizedBox(
+                              height: 300,
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.blue[400]!,
+                                  ),
+                                ),
+                              ),
+                            )
+                          else if (_monthlyTrend.isEmpty)
+                            SizedBox(
+                              height: 60,
+                              child: Center(
+                                child: Text(
+                                  'No transactions yet. Add data to see the trend.',
+                                  style: TextStyle(color: Colors.grey[600]),
+                                ),
+                              ),
+                            )
+                          else
+                            SizedBox(
+                              height: 300,
+                              child: BarChart(
+                                BarChartData(
+                                  alignment: BarChartAlignment.spaceAround,
+                                  maxY: _getMaxYValue(),
+                                  barTouchData: BarTouchData(
+                                    enabled: true,
+                                    touchTooltipData: BarTouchTooltipData(
+                                      getTooltipColor: (group) =>
+                                          Colors.grey[800]!,
+                                      tooltipBorderRadius:
+                                          const BorderRadius.all(
+                                            Radius.circular(8),
+                                          ),
+                                      getTooltipItem:
+                                          (group, groupIndex, rod, rodIndex) {
+                                            final isIncome = rodIndex == 0;
+                                            return BarTooltipItem(
+                                              '${isIncome ? 'Income' : 'Expense'}: ৳${rod.toY.toStringAsFixed(0)}',
+                                              const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            );
+                                          },
+                                    ),
+                                  ),
+                                  titlesData: FlTitlesData(
+                                    show: true,
+                                    bottomTitles: AxisTitles(
+                                      sideTitles: SideTitles(
+                                        showTitles: true,
+                                        getTitlesWidget: (value, meta) {
+                                          final index = value.toInt();
+                                          if (index < _monthlyTrend.length) {
+                                            return Text(
+                                              _monthlyTrend[index]['month'],
+                                              style: const TextStyle(
+                                                fontSize: 10,
+                                              ),
+                                            );
+                                          }
+                                          return const Text('');
+                                        },
+                                      ),
+                                    ),
+                                    leftTitles: AxisTitles(
+                                      sideTitles: SideTitles(
+                                        showTitles: true,
+                                        getTitlesWidget: (value, meta) {
+                                          return Text(
+                                            '৳${(value / 1000).toStringAsFixed(0)}K',
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                            ),
+                                          );
+                                        },
                                       ),
                                     ),
                                   ),
-                            const SizedBox(height: 16),
-                            // Legend
-                            _buildCategoryLegend(),
-                          ],
-                        ),
+                                  barGroups: _buildBarGroups(),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
+                  ),
                   const SizedBox(height: 24),
+                  SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: _navigateToAddExpense,

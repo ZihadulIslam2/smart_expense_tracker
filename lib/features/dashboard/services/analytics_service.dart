@@ -134,16 +134,80 @@ class AnalyticsService {
 
   /// Get spending trend over months
   ///
-  /// Returns a list of monthly spending data
+  /// Returns a list of monthly spending data for the last N months
+  /// Each item contains: month, income, expense, savings
   Future<List<Map<String, dynamic>>> getSpendingTrend({
     required String userId,
-    required int months,
+    int months = 6,
   }) async {
     try {
-      // TODO: Implement logic to fetch spending data for last N months
-      return [];
+      // Fetch all transactions for the user
+      final transactions = await _expenseService.getUserTransactions(
+        userId: userId,
+      );
+
+      // Create list to store monthly data
+      final monthlyData = <Map<String, dynamic>>[];
+
+      // Get current date
+      final now = DateTime.now();
+
+      // Loop through the last N months
+      for (int i = months - 1; i >= 0; i--) {
+        // Calculate the target month
+        final targetDate = DateTime(now.year, now.month - i, 1);
+        final targetMonth = targetDate.month;
+        final targetYear = targetDate.year;
+
+        // Initialize totals for this month
+        double monthlyIncome = 0.0;
+        double monthlyExpense = 0.0;
+
+        // Filter and sum transactions for this month
+        for (var transaction in transactions) {
+          if (transaction.date.year == targetYear &&
+              transaction.date.month == targetMonth) {
+            if (transaction.type == 'income') {
+              monthlyIncome += transaction.amount;
+            } else if (transaction.type == 'expense') {
+              monthlyExpense += transaction.amount;
+            }
+          }
+        }
+
+        // Add month data to list
+        monthlyData.add({
+          'month': _getMonthName(targetMonth),
+          'monthNumber': targetMonth,
+          'year': targetYear,
+          'income': monthlyIncome,
+          'expense': monthlyExpense,
+          'savings': monthlyIncome - monthlyExpense,
+        });
+      }
+
+      return monthlyData;
     } catch (e) {
       throw Exception('Failed to get spending trend: $e');
     }
+  }
+
+  /// Get month name from month number
+  String _getMonthName(int month) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return months[month - 1];
   }
 }
