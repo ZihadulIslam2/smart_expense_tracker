@@ -4,6 +4,7 @@ import 'package:appwrite/appwrite.dart';
 import '../../services/auth_service.dart';
 import '../expenses/services/expense_service.dart';
 import '../expenses/screens/add_expense_screen.dart';
+import '../expenses/screens/expense_list_screen.dart';
 import '../../core/init/appwrite_client.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -61,7 +62,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final databases = Databases(AppwriteClient.client);
     final expenseService = ExpenseService(
       databases: databases,
-      databaseId: '143973bc-3217-4b7e-a1ca-05082dfde404', // Replace with your database ID
+      databaseId:
+          '143973bc-3217-4b7e-a1ca-05082dfde404', // Replace with your database ID
       collectionId: '6962b3c600110543e89f', // Replace with your collection ID
     );
 
@@ -86,6 +88,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _navigateToTransactionList() async {
+    if (_user == null) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ExpenseListScreen(userId: _user!.$id),
+      ),
+    );
   }
 
   @override
@@ -133,6 +146,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: ElevatedButton(
                       onPressed: _navigateToAddExpense,
                       child: const Text('Add Expense'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: _navigateToTransactionList,
+                      child: const Text('View Transactions'),
                     ),
                   ),
                 ],
