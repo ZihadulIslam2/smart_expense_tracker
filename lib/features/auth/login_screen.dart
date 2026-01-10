@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'package:appwrite/appwrite.dart';
 import '../../services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -14,6 +15,19 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   final _authService = AuthService();
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _redirectIfLoggedIn();
+  }
+
+  Future<void> _redirectIfLoggedIn() async {
+    final alreadyLoggedIn = await _authService.hasActiveSession();
+    if (alreadyLoggedIn && mounted) {
+      Navigator.pushReplacementNamed(context, '/home');
+    }
+  }
 
   @override
   void dispose() {
@@ -54,15 +68,53 @@ class _LoginScreenState extends State<LoginScreen> {
         Navigator.pushReplacementNamed(context, '/home');
       }
     } on SocketException {
-      // Network error
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('No internet connection. Please check your network.'),
           backgroundColor: Colors.red,
         ),
       );
+    } on AppwriteException catch (e) {
+      if (e.type == 'user_session_already_exists') {
+        // Treat as success: session is active
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Already logged in')));
+        if (mounted) Navigator.pushReplacementNamed(context, '/home');
+        return;
+      }
+
+      // Show Appwrite message directly
+      final msg = e.message ?? 'Login failed';
+      // Helpful hints for common cases
+      if (e.type == 'user_email_not_verified') {
+        // Your project may require email verification
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Email not verified. Please verify your email in Appwrite.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      } else if (msg.contains('Invalid Origin')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Invalid Origin. Add your Android app in Appwrite → Platforms.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: Colors.red),
+        );
+      }
+      print('Appwrite ${e.code} • ${e.type} • ${e.message}');
     } catch (e) {
-      // All other errors (including Appwrite exceptions)
+      // All other errors
+      print('General Error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(e.toString().replaceAll('Exception: ', '')),
