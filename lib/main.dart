@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:smart_expense_tracker/core/init/appwrite_client.dart';
 import 'package:smart_expense_tracker/features/auth/login_screen.dart';
 import 'package:smart_expense_tracker/features/auth/register_screen.dart';
@@ -6,6 +7,7 @@ import 'package:smart_expense_tracker/features/dashboard/dashboard_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: '.env');
   AppwriteClient.init();
   await AppwriteClient.checkServerHealth();
   // Optionally check current user session (will error if not logged in)

@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:appwrite/models.dart' as models;
 import 'package:appwrite/appwrite.dart';
-import 'package:fl_chart/fl_chart.dart';
 import '../../services/auth_service.dart';
 import '../expenses/services/expense_service.dart';
 import '../expenses/screens/add_expense_screen.dart';
 import '../expenses/screens/expense_list_screen.dart';
 import '../../core/init/appwrite_client.dart';
 import 'services/analytics_service.dart';
+import 'services/ai_service.dart';
+import 'widgets/summary_card.dart';
+import 'widgets/insights_card.dart';
+import 'widgets/category_pie_chart.dart';
+import 'widgets/monthly_bar_chart.dart';
+import 'widgets/ai_suggestions_card.dart';
+import 'widgets/ai_goals_card.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -18,6 +24,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final _authService = AuthService();
+  final _aiService = AIService();
   models.User? _user;
   bool _loading = true;
   double _totalIncome = 0.0;
@@ -29,7 +36,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _loadingCategories = false;
   List<Map<String, dynamic>> _monthlyTrend = [];
   bool _loadingTrend = false;
-  String _insight = '';
+  String _aiSuggestions = '';
+  bool _loadingSuggestions = false;
+  String _aiGoalsAdvice = '';
+  bool _loadingGoalsAdvice = false;
 
   @override
   void initState() {
@@ -38,14 +48,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _init() async {
+    print('[DASHBOARD INIT] Starting dashboard initialization');
     // If no active session, kick back to login
     final hasSession = await _authService.hasActiveSession();
+    print('[DASHBOARD INIT] Has session: $hasSession');
+
     if (!hasSession && mounted) {
       Navigator.pushReplacementNamed(context, '/');
       return;
     }
 
     final user = await _authService.getCurrentUser();
+    print('[DASHBOARD INIT] User: ${user?.$id}');
+
     if (mounted) {
       setState(() {
         _user = user;
@@ -54,11 +69,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       // Initialize ExpenseService
       if (user != null) {
+        print('[DASHBOARD INIT] Initializing expense service');
         _initializeExpenseService();
         // Fetch totals, category spending, and monthly trend after user is set
-        _fetchTotals();
-        _fetchCategorySpending();
-        _fetchMonthlyTrend();
+        await _fetchTotals();
+        print(
+          '[DASHBOARD INIT] After fetchTotals - Income: $_totalIncome, Expense: $_totalExpense',
+        );
+
+        await _fetchCategorySpending();
+        print(
+          '[DASHBOARD INIT] After fetchCategorySpending - Categories: $_categorySpending',
+        );
+
+        await _fetchMonthlyTrend();
+        print(
+          '[DASHBOARD INIT] After fetchMonthlyTrend - Trend length: ${_monthlyTrend.length}',
+        );
+
+        print('[DASHBOARD INIT] About to fetch AI suggestions');
+        _fetchAISuggestions();
+
+        print('[DASHBOARD INIT] About to fetch goals advice');
+        _fetchGoalsAdvice();
       }
     }
   }
@@ -173,6 +206,101 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Future<void> _fetchAISuggestions() async {
+    if (_user == null) {
+      print('[AI DEBUG] _fetchAISuggestions: User is null, returning');
+      return;
+    }
+
+    print('[AI DEBUG] _fetchAISuggestions: Starting fetch');
+    print('[AI DEBUG] Total Income: $_totalIncome');
+    print('[AI DEBUG] Total Expense: $_totalExpense');
+
+    if (_totalIncome == 0) {
+      print('[AI DEBUG] _fetchAISuggestions: Total income is 0, returning');
+      return;
+    }
+
+    setState(() {
+      _loadingSuggestions = true;
+    });
+
+    try {
+      print('[AI DEBUG] Calling AIService.getFinancialSuggestions()');
+      final suggestions = await _aiService.getFinancialSuggestions(
+        totalIncome: _totalIncome,
+        totalExpense: _totalExpense,
+        categorySpending: _categorySpending,
+        monthlyTrend: _monthlyTrend,
+        goalsProgress: {},
+      );
+
+      print('[AI DEBUG] Received suggestions: $suggestions');
+
+      if (mounted) {
+        setState(() {
+          _aiSuggestions = suggestions;
+          _loadingSuggestions = false;
+        });
+        print('[AI DEBUG] UI Updated with suggestions');
+      }
+    } catch (e) {
+      print('[AI ERROR] Error fetching AI suggestions: $e');
+      if (mounted) {
+        setState(() {
+          _aiSuggestions = 'Error: ${e.toString()}';
+          _loadingSuggestions = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _fetchGoalsAdvice() async {
+    if (_user == null) {
+      print('[GOALS DEBUG] _fetchGoalsAdvice: User is null, returning');
+      return;
+    }
+
+    print('[GOALS DEBUG] _fetchGoalsAdvice: Starting fetch');
+    print('[GOALS DEBUG] Total Income: $_totalIncome');
+
+    if (_totalIncome == 0) {
+      print('[GOALS DEBUG] _fetchGoalsAdvice: Total income is 0, returning');
+      return;
+    }
+
+    setState(() {
+      _loadingGoalsAdvice = true;
+    });
+
+    try {
+      print('[GOALS DEBUG] Calling AIService.getSavingsGoalsAdvice()');
+      final goalsAdvice = await _aiService.getSavingsGoalsAdvice(
+        totalIncome: _totalIncome,
+        totalExpense: _totalExpense,
+        categorySpending: _categorySpending,
+      );
+
+      print('[GOALS DEBUG] Received goals advice: $goalsAdvice');
+
+      if (mounted) {
+        setState(() {
+          _aiGoalsAdvice = goalsAdvice;
+          _loadingGoalsAdvice = false;
+        });
+        print('[GOALS DEBUG] UI Updated with goals');
+      }
+    } catch (e) {
+      print('[GOALS ERROR] Error fetching goals advice: $e');
+      if (mounted) {
+        setState(() {
+          _aiGoalsAdvice = 'Error: ${e.toString()}';
+          _loadingGoalsAdvice = false;
+        });
+      }
+    }
+  }
+
   Future<void> _logout() async {
     try {
       await _authService.logout();
@@ -215,6 +343,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _fetchTotals();
       _fetchCategorySpending();
       _fetchMonthlyTrend();
+      _fetchAISuggestions();
+      _fetchGoalsAdvice();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Transaction added successfully!'),
@@ -240,112 +370,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _fetchTotals();
       _fetchCategorySpending();
       _fetchMonthlyTrend();
+      _fetchAISuggestions();
+      _fetchGoalsAdvice();
     }
-  }
-
-  /// Build pie chart sections from category spending data
-  List<PieChartSectionData> _buildPieSections() {
-    final colors = [
-      Colors.red,
-      Colors.blue,
-      Colors.green,
-      Colors.orange,
-      Colors.purple,
-      Colors.cyan,
-      Colors.pink,
-      Colors.indigo,
-    ];
-
-    final total = _categorySpending.values.fold(
-      0.0,
-      (sum, amount) => sum + amount,
-    );
-
-    List<PieChartSectionData> sections = [];
-    int colorIndex = 0;
-
-    _categorySpending.forEach((category, amount) {
-      final percentage = (amount / total) * 100;
-
-      sections.add(
-        PieChartSectionData(
-          color: colors[colorIndex % colors.length],
-          value: amount,
-          title: '${percentage.toStringAsFixed(1)}%',
-          radius: 100,
-          titleStyle: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 12,
-          ),
-        ),
-      );
-
-      colorIndex++;
-    });
-
-    return sections;
-  }
-
-  /// Build legend showing category colors and names
-  Widget _buildCategoryLegend() {
-    final colors = [
-      Colors.red,
-      Colors.blue,
-      Colors.green,
-      Colors.orange,
-      Colors.purple,
-      Colors.cyan,
-      Colors.pink,
-      Colors.indigo,
-    ];
-
-    List<String> categories = _categorySpending.keys.toList();
-    int colorIndex = 0;
-
-    return Wrap(
-      spacing: 16,
-      runSpacing: 8,
-      children: categories.map((category) {
-        final color = colors[colorIndex % colors.length];
-        final amount = _categorySpending[category]!;
-        colorIndex++;
-
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 12,
-              height: 12,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              '$category: ৳${amount.toStringAsFixed(2)}',
-              style: const TextStyle(fontSize: 12),
-            ),
-          ],
-        );
-      }).toList(),
-    );
-  }
-
-  /// Get maximum Y value for bar chart
-  double _getMaxYValue() {
-    if (_monthlyTrend.isEmpty) return 10000;
-
-    double max = 0;
-    for (var month in _monthlyTrend) {
-      final income = (month['income'] as num).toDouble();
-      final expense = (month['expense'] as num).toDouble();
-      if (income > max) max = income;
-      if (expense > max) max = expense;
-    }
-
-    return max * 1.2; // Add 20% padding
   }
 
   /// Generate spending insights
@@ -388,37 +415,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  /// Build bar groups for monthly chart
-  List<BarChartGroupData> _buildBarGroups() {
-    return List.generate(_monthlyTrend.length, (index) {
-      final monthData = _monthlyTrend[index];
-      final income = (monthData['income'] as num).toDouble();
-      final expense = (monthData['expense'] as num).toDouble();
-
-      return BarChartGroupData(
-        x: index,
-        barRods: [
-          BarChartRodData(
-            toY: income,
-            color: Colors.green[400],
-            width: 12,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-          ),
-          BarChartRodData(
-            toY: expense,
-            color: Colors.red[400],
-            width: 12,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-          ),
-        ],
-        barsSpace: 4,
-      );
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    final name = _user?.name?.isNotEmpty == true ? _user!.name! : 'User';
+    final userName = _user?.name;
+    final name = userName != null && userName.isNotEmpty ? userName : 'User';
 
     return Scaffold(
       appBar: AppBar(
@@ -446,367 +446,60 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  // Total Expense Card
-                  Card(
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Total Expense',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              _loadingTotals
-                                  ? SizedBox(
-                                      height: 24,
-                                      width: 24,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                              Colors.red[400]!,
-                                            ),
-                                      ),
-                                    )
-                                  : Text(
-                                      '৳ ${_totalExpense.toStringAsFixed(2)}',
-                                      style: const TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.red,
-                                      ),
-                                    ),
-                            ],
-                          ),
-                          Icon(
-                            Icons.arrow_upward,
-                            color: Colors.red[400],
-                            size: 32,
-                          ),
-                        ],
-                      ),
-                    ),
+                  // Summary Cards
+                  SummaryCard(
+                    title: 'Total Expense',
+                    amount: _totalExpense,
+                    icon: Icons.arrow_upward,
+                    color: Colors.red[400]!,
+                    isLoading: _loadingTotals,
                   ),
                   const SizedBox(height: 12),
-                  // Total Income Card
-                  Card(
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Total Income',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              _loadingTotals
-                                  ? SizedBox(
-                                      height: 24,
-                                      width: 24,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                              Colors.green[400]!,
-                                            ),
-                                      ),
-                                    )
-                                  : Text(
-                                      '৳ ${_totalIncome.toStringAsFixed(2)}',
-                                      style: const TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.green,
-                                      ),
-                                    ),
-                            ],
-                          ),
-                          Icon(
-                            Icons.arrow_downward,
-                            color: Colors.green[400],
-                            size: 32,
-                          ),
-                        ],
-                      ),
-                    ),
+                  SummaryCard(
+                    title: 'Total Income',
+                    amount: _totalIncome,
+                    icon: Icons.arrow_downward,
+                    color: Colors.green[400]!,
+                    isLoading: _loadingTotals,
                   ),
                   const SizedBox(height: 12),
-                  // Total Savings Card
-                  Card(
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Total Savings',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              _loadingTotals
-                                  ? SizedBox(
-                                      height: 24,
-                                      width: 24,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                              Colors.blue[400]!,
-                                            ),
-                                      ),
-                                    )
-                                  : Text(
-                                      '৳ ${(_totalIncome - _totalExpense).toStringAsFixed(2)}',
-                                      style: TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                        color:
-                                            (_totalIncome - _totalExpense) >= 0
-                                            ? Colors.blue
-                                            : Colors.orange,
-                                      ),
-                                    ),
-                            ],
-                          ),
-                          Icon(
-                            (_totalIncome - _totalExpense) >= 0
-                                ? Icons.trending_up
-                                : Icons.trending_down,
-                            color: (_totalIncome - _totalExpense) >= 0
-                                ? Colors.blue[400]
-                                : Colors.orange[400],
-                            size: 32,
-                          ),
-                        ],
-                      ),
-                    ),
+                  SummaryCard(
+                    title: 'Total Savings',
+                    amount: _totalIncome - _totalExpense,
+                    icon: (_totalIncome - _totalExpense) >= 0
+                        ? Icons.trending_up
+                        : Icons.trending_down,
+                    color: (_totalIncome - _totalExpense) >= 0
+                        ? Colors.blue[400]!
+                        : Colors.orange[400]!,
+                    isLoading: _loadingTotals,
                   ),
                   const SizedBox(height: 24),
-                  // Insights Card
-                  Card(
-                    elevation: 2,
-                    color: Colors.blue[50],
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.lightbulb_outline,
-                                color: Colors.amber[600],
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Insights',
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            _generateInsights(),
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[700],
-                              height: 1.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                  // Insights
+                  InsightsCard(insights: _generateInsights()),
+                  const SizedBox(height: 24),
+                  // Category Pie Chart
+                  CategoryPieChart(
+                    categorySpending: _categorySpending,
+                    isLoading: _loadingCategories,
                   ),
                   const SizedBox(height: 24),
-                  // Category-wise Spending Pie Chart (with empty state)
-                  Card(
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Spending by Category',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          if (_loadingCategories)
-                            SizedBox(
-                              height: 250,
-                              child: Center(
-                                child: CircularProgressIndicator(
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    Colors.blue[400]!,
-                                  ),
-                                ),
-                              ),
-                            )
-                          else if (_categorySpending.isEmpty)
-                            SizedBox(
-                              height: 60,
-                              child: Center(
-                                child: Text(
-                                  'No expense data yet. Add expenses to see the chart.',
-                                  style: TextStyle(color: Colors.grey[600]),
-                                ),
-                              ),
-                            )
-                          else
-                            SizedBox(
-                              height: 250,
-                              child: PieChart(
-                                PieChartData(
-                                  sections: _buildPieSections(),
-                                  centerSpaceRadius: 40,
-                                  sectionsSpace: 2,
-                                ),
-                              ),
-                            ),
-                          const SizedBox(height: 16),
-                          if (_categorySpending.isNotEmpty)
-                            _buildCategoryLegend(),
-                        ],
-                      ),
-                    ),
+                  // Monthly Bar Chart
+                  MonthlyBarChart(
+                    monthlyTrend: _monthlyTrend,
+                    isLoading: _loadingTrend,
                   ),
                   const SizedBox(height: 24),
-                  // Monthly Income vs Expense Bar Chart
-                  Card(
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Monthly Income vs Expense',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          if (_loadingTrend)
-                            SizedBox(
-                              height: 300,
-                              child: Center(
-                                child: CircularProgressIndicator(
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    Colors.blue[400]!,
-                                  ),
-                                ),
-                              ),
-                            )
-                          else if (_monthlyTrend.isEmpty)
-                            SizedBox(
-                              height: 60,
-                              child: Center(
-                                child: Text(
-                                  'No transactions yet. Add data to see the trend.',
-                                  style: TextStyle(color: Colors.grey[600]),
-                                ),
-                              ),
-                            )
-                          else
-                            SizedBox(
-                              height: 300,
-                              child: BarChart(
-                                BarChartData(
-                                  alignment: BarChartAlignment.spaceAround,
-                                  maxY: _getMaxYValue(),
-                                  barTouchData: BarTouchData(
-                                    enabled: true,
-                                    touchTooltipData: BarTouchTooltipData(
-                                      getTooltipColor: (group) =>
-                                          Colors.grey[800]!,
-                                      tooltipBorderRadius:
-                                          const BorderRadius.all(
-                                            Radius.circular(8),
-                                          ),
-                                      getTooltipItem:
-                                          (group, groupIndex, rod, rodIndex) {
-                                            final isIncome = rodIndex == 0;
-                                            return BarTooltipItem(
-                                              '${isIncome ? 'Income' : 'Expense'}: ৳${rod.toY.toStringAsFixed(0)}',
-                                              const TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            );
-                                          },
-                                    ),
-                                  ),
-                                  titlesData: FlTitlesData(
-                                    show: true,
-                                    bottomTitles: AxisTitles(
-                                      sideTitles: SideTitles(
-                                        showTitles: true,
-                                        getTitlesWidget: (value, meta) {
-                                          final index = value.toInt();
-                                          if (index < _monthlyTrend.length) {
-                                            return Text(
-                                              _monthlyTrend[index]['month'],
-                                              style: const TextStyle(
-                                                fontSize: 10,
-                                              ),
-                                            );
-                                          }
-                                          return const Text('');
-                                        },
-                                      ),
-                                    ),
-                                    leftTitles: AxisTitles(
-                                      sideTitles: SideTitles(
-                                        showTitles: true,
-                                        getTitlesWidget: (value, meta) {
-                                          return Text(
-                                            '৳${(value / 1000).toStringAsFixed(0)}K',
-                                            style: const TextStyle(
-                                              fontSize: 10,
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                  barGroups: _buildBarGroups(),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
+                  // AI Suggestions
+                  AISuggestionsCard(
+                    suggestions: _aiSuggestions,
+                    isLoading: _loadingSuggestions,
+                  ),
+                  const SizedBox(height: 24),
+                  // AI Goals Advice
+                  AIGoalsCard(
+                    goalsAdvice: _aiGoalsAdvice,
+                    isLoading: _loadingGoalsAdvice,
                   ),
                   const SizedBox(height: 24),
                   SizedBox(
