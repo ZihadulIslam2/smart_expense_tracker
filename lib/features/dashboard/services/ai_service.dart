@@ -4,9 +4,24 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AIService {
   final String apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
-  // Updated to use the latest available model
+  // Using v1beta with gemini-pro model (stable and widely available)
   static const String _baseUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+      'https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent';
+
+  /// Debug method to validate API configuration
+  void debugGeminiSetup() {
+    print('\n========== GEMINI API DEBUG ==========');
+    print('[DEBUG] Model URL: $_baseUrl');
+    print('[DEBUG] API Key configured: ${apiKey.isNotEmpty}');
+    print('[DEBUG] API Key length: ${apiKey.length}');
+    print(
+      '[DEBUG] API Key starts with: ${apiKey.isNotEmpty ? apiKey.substring(0, 10) : 'N/A'}...',
+    );
+    print(
+      '[DEBUG] Full API URL with key: $_baseUrl?key=${apiKey.isNotEmpty ? apiKey.substring(0, 10) : 'N/A'}...',
+    );
+    print('=====================================\n');
+  }
 
   /// Prepares user financial data for AI analysis
   String prepareFinancialData({
@@ -64,9 +79,15 @@ class AIService {
     required Map<String, double> goalsProgress,
   }) async {
     try {
+      print('\n[GEMINI] ========== Financial Suggestions Request ==========');
+
       if (apiKey.isEmpty) {
+        print('[GEMINI ERROR] API Key is empty!');
         return 'AI suggestions unavailable. Please configure your Gemini API key.';
       }
+
+      print('[GEMINI] API Key configured: YES');
+      print('[GEMINI] Preparing financial data...');
 
       final financialData = prepareFinancialData(
         totalIncome: totalIncome,
@@ -100,38 +121,71 @@ Provide the tips in a numbered list format.''';
         },
       };
 
+      print(
+        '[GEMINI] Request body prepared, size: ${jsonEncode(requestBody).length} bytes',
+      );
+      print('[GEMINI] Sending request to: $_baseUrl');
+      print('[GEMINI] Full URL: $_baseUrl?key=${apiKey.substring(0, 10)}...');
+
       final response = await http
           .post(
             Uri.parse('$_baseUrl?key=$apiKey'),
-            headers: {'Content-Type': 'application/json'},
+            headers: {
+              'Content-Type': 'application/json',
+              'User-Agent': 'SmartExpenseTracker/1.0',
+            },
             body: jsonEncode(requestBody),
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 30));
 
-      print('API Response Status: ${response.statusCode}');
-      print('API URL: $_baseUrl?key=$apiKey');
-      print('API Response Body: ${response.body}');
+      print('[GEMINI] Response Status: ${response.statusCode}');
+      print('[GEMINI] Response Headers: ${response.headers}');
+      print('[GEMINI] Response Body Length: ${response.body.length}');
+      print('[GEMINI] Response Body: ${response.body}');
 
       if (response.statusCode == 200) {
+        print('[GEMINI] ✓ Success! Parsing response...');
         final decodedResponse = jsonDecode(response.body);
+        print('[GEMINI] Decoded response keys: ${decodedResponse.keys}');
+
         final candidates = decodedResponse['candidates'] as List?;
+        print('[GEMINI] Candidates found: ${candidates?.length ?? 0}');
 
         if (candidates != null && candidates.isNotEmpty) {
           final content = candidates[0]['content'] as Map?;
+          print('[GEMINI] Content keys: ${content?.keys}');
+
           final parts = content?['parts'] as List?;
+          print('[GEMINI] Parts found: ${parts?.length ?? 0}');
 
           if (parts != null && parts.isNotEmpty) {
-            return parts[0]['text'] ?? 'No suggestions available.';
+            final text = parts[0]['text'] ?? 'No suggestions available.';
+            print(
+              '[GEMINI] ✓ Successfully extracted text: ${text.substring(0, 50)}...',
+            );
+            print(
+              '[GEMINI] ==========================================================\n',
+            );
+            return text;
           }
         }
+        print('[GEMINI] No candidates or parts found in response');
         return 'No suggestions available at the moment.';
       } else {
-        print('API Error: ${response.statusCode}');
-        print('Error Body: ${response.body}');
+        print('[GEMINI] ✗ API Error: ${response.statusCode}');
+        print('[GEMINI] Error details: ${response.body}');
+        print(
+          '[GEMINI] ==========================================================\n',
+        );
         return 'Unable to fetch AI suggestions (Error: ${response.statusCode}). Please check your API key in .env file.';
       }
-    } catch (e) {
-      print('Error fetching AI suggestions: $e');
+    } catch (e, stackTrace) {
+      print('[GEMINI] ✗ Exception occurred:');
+      print('[GEMINI] Error: $e');
+      print('[GEMINI] Stack trace: $stackTrace');
+      print(
+        '[GEMINI] ==========================================================\n',
+      );
       return 'Error fetching AI suggestions: ${e.toString()}';
     }
   }
@@ -216,14 +270,19 @@ Provide the tips in a numbered list format.''';
     required Map<String, double> categorySpending,
   }) async {
     try {
+      print('\n[GEMINI] ========== Savings Goals Advice Request ==========');
+
       if (apiKey.isEmpty) {
+        print('[GEMINI ERROR] API Key is empty!');
         return 'Enable AI for personalized savings goals.';
       }
 
       if (totalIncome == 0) {
+        print('[GEMINI] Total income is 0');
         return 'Add income to get personalized savings recommendations.';
       }
 
+      print('[GEMINI] API Key configured: YES');
       final currentSavingsRate = totalIncome > 0
           ? ((totalIncome - totalExpense) / totalIncome * 100)
           : 0;
@@ -280,17 +339,27 @@ Keep responses concise and specific to their spending.''';
         },
       };
 
+      print(
+        '[GEMINI] Request body prepared, size: ${jsonEncode(requestBody).length} bytes',
+      );
+      print('[GEMINI] Sending request to: $_baseUrl');
+
       final response = await http
           .post(
             Uri.parse('$_baseUrl?key=$apiKey'),
-            headers: {'Content-Type': 'application/json'},
+            headers: {
+              'Content-Type': 'application/json',
+              'User-Agent': 'SmartExpenseTracker/1.0',
+            },
             body: jsonEncode(requestBody),
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 30));
 
-      print('Goals Advice API Status: ${response.statusCode}');
+      print('[GEMINI] Response Status: ${response.statusCode}');
+      print('[GEMINI] Response Body: ${response.body}');
 
       if (response.statusCode == 200) {
+        print('[GEMINI] ✓ Success! Parsing response...');
         final decodedResponse = jsonDecode(response.body);
         final candidates = decodedResponse['candidates'] as List?;
 
@@ -299,17 +368,33 @@ Keep responses concise and specific to their spending.''';
           final parts = content?['parts'] as List?;
 
           if (parts != null && parts.isNotEmpty) {
-            return parts[0]['text'] ?? 'No goals generated.';
+            final text = parts[0]['text'] ?? 'No goals generated.';
+            print(
+              '[GEMINI] ✓ Successfully extracted text: ${text.substring(0, 50)}...',
+            );
+            print(
+              '[GEMINI] ==========================================================\n',
+            );
+            return text;
           }
         }
+        print('[GEMINI] No candidates or parts found');
         return 'Unable to generate savings goals.';
       } else {
-        print('Goals Advice API Error: ${response.statusCode}');
-        print('Error Body: ${response.body}');
+        print('[GEMINI] ✗ API Error: ${response.statusCode}');
+        print('[GEMINI] Error Body: ${response.body}');
+        print(
+          '[GEMINI] ==========================================================\n',
+        );
         return 'Unable to generate goals (Error: ${response.statusCode})';
       }
-    } catch (e) {
-      print('Error fetching goals advice: $e');
+    } catch (e, stackTrace) {
+      print('[GEMINI] ✗ Exception occurred:');
+      print('[GEMINI] Error: $e');
+      print('[GEMINI] Stack trace: $stackTrace');
+      print(
+        '[GEMINI] ==========================================================\n',
+      );
       return 'Error: ${e.toString()}';
     }
   }

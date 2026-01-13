@@ -49,6 +49,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _init() async {
     print('[DASHBOARD INIT] Starting dashboard initialization');
+
+    // Debug Gemini setup
+    _aiService.debugGeminiSetup();
+
     // If no active session, kick back to login
     final hasSession = await _authService.hasActiveSession();
     print('[DASHBOARD INIT] Has session: $hasSession');
