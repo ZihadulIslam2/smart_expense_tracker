@@ -429,9 +429,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: const Text('Dashboard'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
-            onPressed: _logout,
+            icon: const Icon(Icons.school),
+            tooltip: 'Financial Literacy',
+            onPressed: () => Navigator.pushNamed(context, '/education'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
+            onPressed: () => Navigator.pushNamed(context, '/settings'),
           ),
         ],
       ),
@@ -521,9 +526,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: const Text('View Transactions'),
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () =>
+                              Navigator.pushNamed(context, '/education'),
+                          icon: const Icon(Icons.school),
+                          label: const Text('Learn'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () =>
+                              Navigator.pushNamed(context, '/settings'),
+                          icon: const Icon(Icons.settings),
+                          label: const Text('Settings'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _navigateToAddExpense,
+        tooltip: 'Add Transaction',
+        child: const Icon(Icons.add),
+      ),
     );
   }
 }
