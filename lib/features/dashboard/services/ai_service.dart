@@ -4,9 +4,9 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AIService {
   final String apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
-  // Using v1beta with gemini-pro model (stable and widely available)
+  // Using v1 with gemini-1.5-flash model (stable, fast, and production-ready)
   static const String _baseUrl =
-      'https://generativelanguage.googleapis.com/v1/models/gemini-3-flash-preview:generateContent';
+      'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent';
 
   /// Debug method to validate API configuration
   void debugGeminiSetup() {

@@ -90,7 +90,7 @@ class AppTheme {
       ),
 
       // Card Theme
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         elevation: elevationS,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusM),
@@ -292,7 +292,7 @@ class AppTheme {
       ),
 
       // Dialog Theme
-      dialogTheme: DialogTheme(
+      dialogTheme: DialogThemeData(
         elevation: elevationL,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusL),
