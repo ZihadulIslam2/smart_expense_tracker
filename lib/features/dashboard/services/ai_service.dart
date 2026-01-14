@@ -6,7 +6,7 @@ class AIService {
   final String apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
   // Using v1beta with gemini-pro model (stable and widely available)
   static const String _baseUrl =
-      'https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent';
+      'https://generativelanguage.googleapis.com/v1/models/gemini-3-flash-preview:generateContent';
 
   /// Debug method to validate API configuration
   void debugGeminiSetup() {
