@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/init/appwrite_client.dart';
+import '../../core/services/data_cache_service.dart';
 import '../../services/auth_service.dart';
 import '../expenses/services/expense_service.dart';
 import '../dashboard/services/analytics_service.dart';
@@ -20,6 +22,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
   String? _userId;
   bool _loading = true;
+  bool _isFirstLoad = true;
 
   double _totalIncome = 0.0;
   double _totalExpense = 0.0;
@@ -33,6 +36,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
   late ExpenseService _expenseService;
   late AnalyticsService _analyticsService;
+  late DataCacheService _cacheService;
 
   @override
   void initState() {
@@ -55,17 +59,21 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       return;
     }
 
+    // Initialize cache service
+    final prefs = await SharedPreferences.getInstance();
+    _cacheService = DataCacheService(prefs: prefs);
+
     if (mounted) {
       setState(() {
         _userId = user!.$id;
-        _loading = false;
       });
 
       // Initialize services
       _initializeServices();
 
-      // Fetch all analytics data
-      await _fetchAllData();
+      // Fetch all analytics data only on first load
+      await _fetchAllData(forceRefresh: _isFirstLoad);
+      _isFirstLoad = false;
     }
   }
 
@@ -75,19 +83,35 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       databases: databases,
       databaseId: '143973bc-3217-4b7e-a1ca-05082dfde404',
       collectionId: '6962b3c600110543e89f',
+      cacheService: _cacheService,
     );
-    _analyticsService = AnalyticsService(expenseService: _expenseService);
+    _analyticsService = AnalyticsService(
+      expenseService: _expenseService,
+      cacheService: _cacheService,
+    );
   }
 
-  Future<void> _fetchAllData() async {
+  Future<void> _fetchAllData({bool forceRefresh = false}) async {
+    if (forceRefresh) {
+      setState(() {
+        _loading = true;
+      });
+    }
+
     await Future.wait([
-      _fetchTotals(),
-      _fetchCategorySpending(),
-      _fetchMonthlyTrend(),
+      _fetchTotals(forceRefresh: forceRefresh),
+      _fetchCategorySpending(forceRefresh: forceRefresh),
+      _fetchMonthlyTrend(forceRefresh: forceRefresh),
     ]);
+
+    if (mounted) {
+      setState(() {
+        _loading = false;
+      });
+    }
   }
 
-  Future<void> _fetchTotals() async {
+  Future<void> _fetchTotals({bool forceRefresh = false}) async {
     if (_userId == null) return;
 
     setState(() {
@@ -97,6 +121,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     try {
       final transactions = await _expenseService.getUserTransactions(
         userId: _userId!,
+        forceRefresh: forceRefresh,
       );
 
       double totalIncome = 0.0;
@@ -127,7 +152,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     }
   }
 
-  Future<void> _fetchCategorySpending() async {
+  Future<void> _fetchCategorySpending({bool forceRefresh = false}) async {
     if (_userId == null) return;
 
     setState(() {
@@ -137,6 +162,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     try {
       final spending = await _analyticsService.getCategoryWiseSpending(
         userId: _userId!,
+        forceRefresh: forceRefresh,
       );
 
       if (mounted) {
@@ -155,7 +181,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     }
   }
 
-  Future<void> _fetchMonthlyTrend() async {
+  Future<void> _fetchMonthlyTrend({bool forceRefresh = false}) async {
     if (_userId == null) return;
 
     setState(() {
@@ -166,6 +192,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       final trend = await _analyticsService.getSpendingTrend(
         userId: _userId!,
         months: 6,
+        forceRefresh: forceRefresh,
       );
 
       if (mounted) {
@@ -231,7 +258,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-              onRefresh: _fetchAllData,
+              onRefresh: () => _fetchAllData(forceRefresh: true),
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),

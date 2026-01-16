@@ -1,19 +1,23 @@
 import 'package:appwrite/appwrite.dart';
 import '../models/budget_model.dart';
+import '../../../core/services/data_cache_service.dart';
 
 /// Budget Service for managing budgets in Appwrite
 class BudgetService {
   final Databases _databases;
   final String _databaseId;
   final String _collectionId;
+  final DataCacheService _cacheService;
 
   BudgetService({
     required Databases databases,
     required String databaseId,
     required String collectionId,
+    required DataCacheService cacheService,
   }) : _databases = databases,
        _databaseId = databaseId,
-       _collectionId = collectionId;
+       _collectionId = collectionId,
+       _cacheService = cacheService;
 
   /// Create a new budget
   Future<BudgetModel> createBudget({
@@ -37,6 +41,9 @@ class BudgetService {
         },
       );
 
+      // Invalidate cache
+      await _cacheService.clearCache('budgets_$userId');
+
       return BudgetModel.fromDocument(doc.data);
     } catch (e) {
       throw Exception('Failed to create budget: $e');
@@ -44,8 +51,30 @@ class BudgetService {
   }
 
   /// Get all budgets for a user
-  Future<List<BudgetModel>> getUserBudgets({required String userId}) async {
+  Future<List<BudgetModel>> getUserBudgets({
+    required String userId,
+    bool forceRefresh = false,
+  }) async {
     try {
+      final cacheKey = 'budgets_$userId';
+
+      // Return cached data if valid and not forcing refresh
+      if (!forceRefresh) {
+        final cached = await _cacheService.getCachedData<List<dynamic>>(
+          cacheKey,
+          (json) => json is List ? json : [],
+        );
+        if (cached != null && cached.isNotEmpty) {
+          return cached
+              .map(
+                (item) => BudgetModel.fromDocument(
+                  item is Map ? item.cast<String, dynamic>() : {},
+                ),
+              )
+              .toList();
+        }
+      }
+
       final response = await _databases.listDocuments(
         databaseId: _databaseId,
         collectionId: _collectionId,
@@ -55,9 +84,17 @@ class BudgetService {
         ],
       );
 
-      return response.documents
+      final budgets = response.documents
           .map((doc) => BudgetModel.fromDocument(doc.data))
           .toList();
+
+      // Cache the results
+      await _cacheService.cacheData(
+        cacheKey,
+        budgets.map((b) => b.toMap()).toList(),
+      );
+
+      return budgets;
     } catch (e) {
       throw Exception('Failed to fetch budgets: $e');
     }
@@ -121,6 +158,7 @@ class BudgetService {
   /// Update a budget
   Future<BudgetModel> updateBudget({
     required String budgetId,
+    required String userId,
     required String category,
     required double amount,
   }) async {
@@ -132,6 +170,9 @@ class BudgetService {
         data: {'category': category, 'amount': amount},
       );
 
+      // Invalidate cache
+      await _cacheService.clearCache('budgets_$userId');
+
       return BudgetModel.fromDocument(doc.data);
     } catch (e) {
       throw Exception('Failed to update budget: $e');
@@ -139,13 +180,19 @@ class BudgetService {
   }
 
   /// Delete a budget
-  Future<void> deleteBudget({required String budgetId}) async {
+  Future<void> deleteBudget({
+    required String budgetId,
+    required String userId,
+  }) async {
     try {
       await _databases.deleteDocument(
         databaseId: _databaseId,
         collectionId: _collectionId,
         documentId: budgetId,
       );
+
+      // Invalidate cache
+      await _cacheService.clearCache('budgets_$userId');
     } catch (e) {
       throw Exception('Failed to delete budget: $e');
     }

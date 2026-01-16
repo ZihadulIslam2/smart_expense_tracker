@@ -1,19 +1,23 @@
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart';
 import '../models/transaction_model.dart';
+import '../../../core/services/data_cache_service.dart';
 
 class ExpenseService {
   final Databases _databases;
   final String _databaseId;
   final String _collectionId;
+  final DataCacheService _cacheService;
 
   ExpenseService({
     required Databases databases,
     required String databaseId,
     required String collectionId,
+    required DataCacheService cacheService,
   }) : _databases = databases,
        _databaseId = databaseId,
-       _collectionId = collectionId;
+       _collectionId = collectionId,
+       _cacheService = cacheService;
 
   /// Add a new transaction to the database
   Future<TransactionModel> addTransaction({
@@ -44,6 +48,10 @@ class ExpenseService {
         data: transaction.toMap(),
       );
 
+      // Invalidate cache for this user
+      await _cacheService.clearCache('transactions_$userId');
+      await _cacheService.clearCache('analytics_$userId');
+
       return TransactionModel.fromMap(document.data);
     } catch (e) {
       throw Exception('Failed to add transaction: $e');
@@ -53,9 +61,31 @@ class ExpenseService {
   /// Get all transactions for a specific user
   Future<List<TransactionModel>> getUserTransactions({
     required String userId,
+    bool forceRefresh = false,
     int? limit,
     int? offset,
   }) async {
+    const cacheKey = 'transactions_';
+    final userCacheKey = cacheKey + userId;
+
+    // Return cached data if valid and not forcing refresh
+    if (!forceRefresh) {
+      final cached = await _cacheService.getCachedData<List<dynamic>>(
+        userCacheKey,
+        (json) => json is List ? json : [],
+      );
+      if (cached != null && cached.isNotEmpty) {
+        print('[CACHE] Using cached transactions for $userId');
+        return cached
+            .map(
+              (item) => TransactionModel.fromMap(
+                item is Map ? item.cast<String, dynamic>() : {},
+              ),
+            )
+            .toList();
+      }
+    }
+
     try {
       final documents = await _databases.listDocuments(
         databaseId: _databaseId,
@@ -68,22 +98,38 @@ class ExpenseService {
         ],
       );
 
-      return documents.documents
+      final transactions = documents.documents
           .map((doc) => TransactionModel.fromMap(doc.data))
           .toList();
+
+      // Cache the results
+      await _cacheService.cacheData(
+        userCacheKey,
+        transactions.map((t) => t.toMap()).toList(),
+      );
+
+      print('[API] Fetched fresh transactions for $userId');
+      return transactions;
     } catch (e) {
       throw Exception('Failed to fetch transactions: $e');
     }
   }
 
   /// Delete a transaction by document ID
-  Future<void> deleteTransaction({required String documentId}) async {
+  Future<void> deleteTransaction({
+    required String documentId,
+    required String userId,
+  }) async {
     try {
       await _databases.deleteDocument(
         databaseId: _databaseId,
         collectionId: _collectionId,
         documentId: documentId,
       );
+
+      // Invalidate cache for this user
+      await _cacheService.clearCache('transactions_$userId');
+      await _cacheService.clearCache('analytics_$userId');
     } catch (e) {
       throw Exception('Failed to delete transaction: $e');
     }
@@ -93,7 +139,28 @@ class ExpenseService {
   Future<List<TransactionModel>> getTransactionsByType({
     required String userId,
     required String type,
+    bool forceRefresh = false,
   }) async {
+    final userCacheKey = 'transactions_${userId}_$type';
+
+    // Return cached data if valid and not forcing refresh
+    if (!forceRefresh) {
+      final cached = await _cacheService.getCachedData<List<dynamic>>(
+        userCacheKey,
+        (json) => json is List ? json : [],
+      );
+      if (cached != null && cached.isNotEmpty) {
+        print('[CACHE] Using cached $type transactions for $userId');
+        return cached
+            .map(
+              (item) => TransactionModel.fromMap(
+                item is Map ? item.cast<String, dynamic>() : {},
+              ),
+            )
+            .toList();
+      }
+    }
+
     try {
       final documents = await _databases.listDocuments(
         databaseId: _databaseId,
@@ -105,9 +172,18 @@ class ExpenseService {
         ],
       );
 
-      return documents.documents
+      final transactions = documents.documents
           .map((doc) => TransactionModel.fromMap(doc.data))
           .toList();
+
+      // Cache the results
+      await _cacheService.cacheData(
+        userCacheKey,
+        transactions.map((t) => t.toMap()).toList(),
+      );
+
+      print('[API] Fetched fresh $type transactions for $userId');
+      return transactions;
     } catch (e) {
       throw Exception('Failed to fetch transactions by type: $e');
     }

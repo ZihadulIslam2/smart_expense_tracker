@@ -1,7 +1,9 @@
 import 'package:appwrite/appwrite.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smart_expense_tracker/core/init/appwrite_client.dart';
+import 'package:smart_expense_tracker/core/services/data_cache_service.dart';
 import 'package:smart_expense_tracker/features/expenses/models/transaction_model.dart';
 import 'package:smart_expense_tracker/features/expenses/screens/add_expense_screen.dart';
 import 'package:smart_expense_tracker/features/expenses/services/expense_service.dart';
@@ -18,11 +20,13 @@ class _RecordsScreenState extends State<RecordsScreen> {
   final _authService = AuthService();
 
   late ExpenseService _expenseService;
+  late DataCacheService _cacheService;
   String? _userId;
 
   List<TransactionModel> _transactions = [];
   String _filterType = 'all';
   bool _loading = true;
+  bool _isFirstLoad = true;
 
   @override
   void initState() {
@@ -43,6 +47,10 @@ class _RecordsScreenState extends State<RecordsScreen> {
       return;
     }
 
+    // Initialize cache service
+    final prefs = await SharedPreferences.getInstance();
+    _cacheService = DataCacheService(prefs: prefs);
+
     _initializeService();
 
     if (mounted) {
@@ -51,7 +59,9 @@ class _RecordsScreenState extends State<RecordsScreen> {
       });
     }
 
-    await _fetchTransactions();
+    // Only fetch on first load
+    await _fetchTransactions(forceRefresh: _isFirstLoad);
+    _isFirstLoad = false;
   }
 
   void _initializeService() {
@@ -60,26 +70,32 @@ class _RecordsScreenState extends State<RecordsScreen> {
       databases: databases,
       databaseId: '143973bc-3217-4b7e-a1ca-05082dfde404',
       collectionId: '6962b3c600110543e89f',
+      cacheService: _cacheService,
     );
   }
 
-  Future<void> _fetchTransactions() async {
+  Future<void> _fetchTransactions({bool forceRefresh = false}) async {
     if (_userId == null) return;
 
-    setState(() {
-      _loading = true;
-    });
+    // Only show loading on first load or force refresh
+    if (forceRefresh) {
+      setState(() {
+        _loading = true;
+      });
+    }
 
     try {
       List<TransactionModel> transactions;
       if (_filterType == 'all') {
         transactions = await _expenseService.getUserTransactions(
           userId: _userId!,
+          forceRefresh: forceRefresh,
         );
       } else {
         transactions = await _expenseService.getTransactionsByType(
           userId: _userId!,
           type: _filterType,
+          forceRefresh: forceRefresh,
         );
       }
 
@@ -106,7 +122,10 @@ class _RecordsScreenState extends State<RecordsScreen> {
 
   Future<void> _deleteTransaction(String documentId) async {
     try {
-      await _expenseService.deleteTransaction(documentId: documentId);
+      await _expenseService.deleteTransaction(
+        documentId: documentId,
+        userId: _userId!,
+      );
       setState(() {
         _transactions.removeWhere((t) => t.id == documentId);
       });
@@ -198,7 +217,8 @@ class _RecordsScreenState extends State<RecordsScreen> {
                           ),
                         )
                       : RefreshIndicator(
-                          onRefresh: _fetchTransactions,
+                          onRefresh: () =>
+                              _fetchTransactions(forceRefresh: true),
                           child: ListView.builder(
                             itemCount: _transactions.length,
                             padding: const EdgeInsets.all(8.0),
@@ -221,7 +241,8 @@ class _RecordsScreenState extends State<RecordsScreen> {
         setState(() {
           _filterType = value;
         });
-        _fetchTransactions();
+        // Use cache for filter changes unless it's the first time
+        _fetchTransactions(forceRefresh: false);
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

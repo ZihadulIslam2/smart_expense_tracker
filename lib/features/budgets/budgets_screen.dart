@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/init/appwrite_client.dart';
+import '../../core/services/data_cache_service.dart';
 import '../../services/auth_service.dart';
 import '../../core/services/badge_service.dart';
 import '../expenses/services/expense_service.dart';
@@ -22,9 +24,11 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
 
   String? _userId;
   bool _loading = true;
+  bool _isFirstLoad = true;
 
   late BudgetService _budgetService;
   late ExpenseService _expenseService;
+  late DataCacheService _cacheService;
 
   List<BudgetModel> _budgets = [];
   Map<String, double> _categorySpending = {};
@@ -53,17 +57,21 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
       return;
     }
 
+    // Initialize cache service
+    final prefs = await SharedPreferences.getInstance();
+    _cacheService = DataCacheService(prefs: prefs);
+
     if (mounted) {
       setState(() {
         _userId = user!.$id;
-        _loading = false;
       });
 
       // Initialize services
       _initializeServices();
 
-      // Fetch data
-      await _fetchData();
+      // Fetch data only on first load
+      await _fetchData(forceRefresh: _isFirstLoad);
+      _isFirstLoad = false;
     }
   }
 
@@ -75,6 +83,7 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
       databaseId: '143973bc-3217-4b7e-a1ca-05082dfde404',
       collectionId:
           '696a22c100294dd67a8c', // You'll need to create this collection
+      cacheService: _cacheService,
     );
 
     _expenseService = ExpenseService(

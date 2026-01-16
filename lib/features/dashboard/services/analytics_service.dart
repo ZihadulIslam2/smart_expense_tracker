@@ -1,14 +1,19 @@
 import 'package:appwrite/appwrite.dart';
 import '../../expenses/models/transaction_model.dart';
 import '../../expenses/services/expense_service.dart';
+import '../../../core/services/data_cache_service.dart';
 
 /// Analytics Service for dashboard insights
 /// Provides data for monthly summaries, category breakdown, and savings calculations
 class AnalyticsService {
   final ExpenseService _expenseService;
+  final DataCacheService _cacheService;
 
-  AnalyticsService({required ExpenseService expenseService})
-    : _expenseService = expenseService;
+  AnalyticsService({
+    required ExpenseService expenseService,
+    required DataCacheService cacheService,
+  }) : _expenseService = expenseService,
+       _cacheService = cacheService;
 
   /// Get monthly summary of income and expenses
   ///
@@ -20,12 +25,31 @@ class AnalyticsService {
     required String userId,
     int? month,
     int? year,
+    bool forceRefresh = false,
   }) async {
     try {
       // Use current month/year if not provided
       final now = DateTime.now();
       final targetMonth = month ?? now.month;
       final targetYear = year ?? now.year;
+
+      final cacheKey =
+          'analytics_summary_${userId}_${targetYear}_${targetMonth}';
+
+      // Return cached data if valid and not forcing refresh
+      if (!forceRefresh) {
+        final cached = await _cacheService.getCachedData<Map<String, dynamic>>(
+          cacheKey,
+          (json) => (json as Map).cast<String, dynamic>(),
+        );
+        if (cached != null) {
+          return {
+            'income': (cached['income'] as num).toDouble(),
+            'expense': (cached['expense'] as num).toDouble(),
+            'savings': (cached['savings'] as num).toDouble(),
+          };
+        }
+      }
 
       // Calculate start and end of month
       final firstDay = DateTime(targetYear, targetMonth, 1);
@@ -38,6 +62,7 @@ class AnalyticsService {
       // Fetch all transactions for the user
       final transactions = await _expenseService.getUserTransactions(
         userId: userId,
+        forceRefresh: forceRefresh,
       );
 
       // Filter transactions for the target month
@@ -58,11 +83,16 @@ class AnalyticsService {
 
       final savings = totalIncome - totalExpense;
 
-      return {
+      final result = {
         'income': totalIncome,
         'expense': totalExpense,
         'savings': savings,
       };
+
+      // Cache the result
+      await _cacheService.cacheData(cacheKey, result);
+
+      return result;
     } catch (e) {
       throw Exception('Failed to get monthly summary: $e');
     }
@@ -75,11 +105,26 @@ class AnalyticsService {
   /// Example: {'Food': 5000.0, 'Transportation': 2000.0, ...}
   Future<Map<String, double>> getCategoryWiseSpending({
     required String userId,
+    bool forceRefresh = false,
   }) async {
     try {
+      final cacheKey = 'analytics_categories_$userId';
+
+      // Return cached data if valid and not forcing refresh
+      if (!forceRefresh) {
+        final cached = await _cacheService.getCachedData<Map<String, dynamic>>(
+          cacheKey,
+          (json) => (json as Map).cast<String, dynamic>(),
+        );
+        if (cached != null) {
+          return cached.cast<String, double>();
+        }
+      }
+
       // Fetch all transactions for the user
       final transactions = await _expenseService.getUserTransactions(
         userId: userId,
+        forceRefresh: forceRefresh,
       );
 
       // Create a map to group expenses by category
@@ -96,6 +141,9 @@ class AnalyticsService {
               currentAmount + transaction.amount;
         }
       }
+
+      // Cache the result
+      await _cacheService.cacheData(cacheKey, categorySpending);
 
       return categorySpending;
     } catch (e) {
@@ -139,11 +187,32 @@ class AnalyticsService {
   Future<List<Map<String, dynamic>>> getSpendingTrend({
     required String userId,
     int months = 6,
+    bool forceRefresh = false,
   }) async {
     try {
+      final cacheKey = 'analytics_trend_${userId}_$months';
+
+      // Return cached data if valid and not forcing refresh
+      if (!forceRefresh) {
+        final cached = await _cacheService.getCachedData<List<dynamic>>(
+          cacheKey,
+          (json) => json is List ? json : [],
+        );
+        if (cached != null && cached.isNotEmpty) {
+          return cached
+              .map(
+                (item) =>
+                    (item is Map ? item.cast<String, dynamic>() : {})
+                        as Map<String, dynamic>,
+              )
+              .toList();
+        }
+      }
+
       // Fetch all transactions for the user
       final transactions = await _expenseService.getUserTransactions(
         userId: userId,
+        forceRefresh: forceRefresh,
       );
 
       // Create list to store monthly data
@@ -185,6 +254,9 @@ class AnalyticsService {
           'savings': monthlyIncome - monthlyExpense,
         });
       }
+
+      // Cache the result
+      await _cacheService.cacheData(cacheKey, monthlyData);
 
       return monthlyData;
     } catch (e) {
