@@ -372,18 +372,6 @@ class _GoalsScreenState extends State<GoalsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Goals'),
-        elevation: 0,
-        actions: [
-          if (_goals.isNotEmpty && !_aiLoading)
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: _generateAIInsights,
-              tooltip: 'Refresh AI Insights',
-            ),
-        ],
-      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(

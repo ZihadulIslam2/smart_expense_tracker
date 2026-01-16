@@ -228,7 +228,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Analysis'), elevation: 0),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(

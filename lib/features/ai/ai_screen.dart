@@ -335,7 +335,6 @@ class _AIScreenState extends State<AIScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('AI Suggestions'), elevation: 0),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(

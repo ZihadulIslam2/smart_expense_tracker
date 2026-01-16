@@ -73,7 +73,8 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
     _budgetService = BudgetService(
       databases: databases,
       databaseId: '143973bc-3217-4b7e-a1ca-05082dfde404',
-      collectionId: '696a22c100294dd67a8c', // You'll need to create this collection
+      collectionId:
+          '696a22c100294dd67a8c', // You'll need to create this collection
     );
 
     _expenseService = ExpenseService(
@@ -473,7 +474,6 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Budgets'), elevation: 0),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(

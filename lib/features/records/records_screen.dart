@@ -149,7 +149,6 @@ class _RecordsScreenState extends State<RecordsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Records')),
       floatingActionButton: FloatingActionButton(
         onPressed: _onAddTransaction,
         child: const Icon(Icons.add),
