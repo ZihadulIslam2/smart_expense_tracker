@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/transaction_model.dart';
 import '../services/expense_service.dart';
 import '../../../core/init/appwrite_client.dart';
+import '../../../core/services/data_cache_service.dart';
 
 class ExpenseListScreen extends StatefulWidget {
   final String userId;
@@ -16,6 +18,7 @@ class ExpenseListScreen extends StatefulWidget {
 
 class _ExpenseListScreenState extends State<ExpenseListScreen> {
   late ExpenseService _expenseService;
+  late DataCacheService _cacheService;
   List<TransactionModel> _transactions = [];
   bool _loading = true;
   String _filterType = 'all'; // 'all', 'income', 'expense'
@@ -27,12 +30,16 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
     _fetchTransactions();
   }
 
-  void _initializeService() {
+  void _initializeService() async {
+    final prefs = await SharedPreferences.getInstance();
+    _cacheService = DataCacheService(prefs: prefs);
+
     final databases = Databases(AppwriteClient.client);
     _expenseService = ExpenseService(
       databases: databases,
       databaseId: '143973bc-3217-4b7e-a1ca-05082dfde404',
       collectionId: '6962b3c600110543e89f',
+      cacheService: _cacheService,
     );
   }
 
@@ -76,7 +83,10 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
 
   Future<void> _deleteTransaction(String documentId) async {
     try {
-      await _expenseService.deleteTransaction(documentId: documentId);
+      await _expenseService.deleteTransaction(
+        documentId: documentId,
+        userId: widget.userId,
+      );
 
       setState(() {
         _transactions.removeWhere((t) => t.id == documentId);

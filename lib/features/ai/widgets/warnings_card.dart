@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 class WarningsCard extends StatelessWidget {
   final List<String> warnings;
   final bool isLoading;
+  final VoidCallback? onRetry;
 
   const WarningsCard({
     super.key,
     required this.warnings,
     this.isLoading = false,
+    this.onRetry,
   });
 
   @override
@@ -67,12 +69,19 @@ class WarningsCard extends StatelessWidget {
                   size: 28,
                 ),
                 const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
+                Expanded(
+                  child: const Text(
                     'Financial Alerts',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
+                if (onRetry != null && !isLoading)
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    color: Colors.orange[700],
+                    onPressed: onRetry,
+                    tooltip: 'Refresh',
+                  ),
               ],
             ),
             const SizedBox(height: 16),

@@ -1,13 +1,16 @@
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
+import '../core/services/data_cache_service.dart';
 
 /// AI Service for financial analysis using Google Gemini
 class AIService {
   late final GenerativeModel _model;
   final String _apiKey;
+  final DataCacheService? _cacheService;
 
-  AIService({String? apiKey})
-    : _apiKey = apiKey ?? (dotenv.env['GEMINI_API_KEY'] ?? '') {
+  AIService({String? apiKey, DataCacheService? cacheService})
+    : _apiKey = apiKey ?? (dotenv.env['GEMINI_API_KEY'] ?? ''),
+      _cacheService = cacheService {
     if (_apiKey.isEmpty) {
       throw Exception('GEMINI_API_KEY not found in environment variables');
     }
@@ -16,7 +19,7 @@ class AIService {
 
   void _initializeModel() {
     _model = GenerativeModel(
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-1.5-flash',
       apiKey: _apiKey,
       safetySettings: [
         SafetySetting(HarmCategory.harassment, HarmBlockThreshold.none),
@@ -33,9 +36,31 @@ class AIService {
     required double totalExpense,
     required Map<String, double> categorySpending,
     required List<Map<String, dynamic>> monthlyTrend,
-    required Map<String, double> budgetStatus, // category -> spent/budget ratio
+    required Map<String, double> budgetStatus,
     required int totalTransactions,
+    bool forceRefresh = false,
   }) async {
+    const cacheKey = 'ai_financial_analysis';
+
+    // Check cache first
+    if (!forceRefresh && _cacheService != null) {
+      if (_cacheService!.isCacheValid(cacheKey)) {
+        try {
+          final cached = await _cacheService!
+              .getCachedData<Map<String, dynamic>>(
+                cacheKey,
+                (json) => Map<String, dynamic>.from(json as Map),
+              );
+          if (cached != null) {
+            print('[CACHE] Using cached financial analysis');
+            return cached;
+          }
+        } catch (e) {
+          print('[CACHE] Error reading cached analysis: $e');
+        }
+      }
+    }
+
     try {
       final prompt = _buildFinancialAnalysisPrompt(
         totalIncome: totalIncome,
@@ -47,17 +72,20 @@ class AIService {
       );
 
       final response = await _model.generateContent([Content.text(prompt)]);
-      final text = response.text ?? '';
+      final result = _parseFinancialAnalysis(response.text ?? '');
 
-      // Parse the response
-      return _parseFinancialAnalysis(text);
+      // Cache the result
+      if (_cacheService != null) {
+        await _cacheService!.cacheData(cacheKey, result);
+        print('[CACHE] Cached financial analysis');
+      }
+
+      return result;
     } catch (e) {
       print('[AI ERROR] Error generating financial analysis: $e');
       return {
-        'error': 'Unable to generate analysis: ${e.toString()}',
-        'suggestions': [],
-        'warnings': [],
-        'tips': [],
+        'analysis': 'Unable to generate analysis',
+        'timestamp': DateTime.now().toIso8601String(),
       };
     }
   }
@@ -66,13 +94,36 @@ class AIService {
   Future<String> getSpendingAdvice({
     required Map<String, double> categorySpending,
     required double totalIncome,
+    bool forceRefresh = false,
   }) async {
+    const cacheKey = 'ai_spending_advice';
+
+    // Check cache first
+    if (!forceRefresh && _cacheService != null) {
+      if (_cacheService!.isCacheValid(cacheKey)) {
+        try {
+          final cached = await _cacheService!.getCachedData<String>(
+            cacheKey,
+            (json) => json.toString(),
+          );
+          if (cached != null) {
+            print('[CACHE] Using cached spending advice');
+            return cached;
+          }
+        } catch (e) {
+          print('[CACHE] Error reading cached advice: $e');
+        }
+      }
+    }
+
     try {
       final topCategory = _getTopCategory(categorySpending);
+      final totalSpending = categorySpending.values.fold<double>(
+        0.0,
+        (a, b) => a + b,
+      );
       final savingsRate = totalIncome > 0
-          ? (((totalIncome - categorySpending.values.fold(0, (a, b) => a + b)) /
-                    totalIncome) *
-                100)
+          ? (((totalIncome - totalSpending) / totalIncome) * 100)
           : 0;
 
       final prompt =
@@ -84,7 +135,15 @@ class AIService {
 Provide 2-3 specific, actionable spending advice points to optimize spending. Be concise and practical.''';
 
       final response = await _model.generateContent([Content.text(prompt)]);
-      return response.text ?? 'Unable to generate advice';
+      final advice = response.text ?? 'Unable to generate advice';
+
+      // Cache the result
+      if (_cacheService != null) {
+        await _cacheService!.cacheData(cacheKey, advice);
+        print('[CACHE] Cached spending advice');
+      }
+
+      return advice;
     } catch (e) {
       print('[AI ERROR] Error generating spending advice: $e');
       return 'Unable to generate advice at this time';
@@ -96,7 +155,28 @@ Provide 2-3 specific, actionable spending advice points to optimize spending. Be
     required double totalIncome,
     required double totalExpense,
     required Map<String, double> categorySpending,
+    bool forceRefresh = false,
   }) async {
+    const cacheKey = 'ai_saving_tips';
+
+    // Check cache first
+    if (!forceRefresh && _cacheService != null) {
+      if (_cacheService!.isCacheValid(cacheKey)) {
+        try {
+          final cached = await _cacheService!.getCachedData<String>(
+            cacheKey,
+            (json) => json.toString(),
+          );
+          if (cached != null) {
+            print('[CACHE] Using cached saving tips');
+            return cached;
+          }
+        } catch (e) {
+          print('[CACHE] Error reading cached tips: $e');
+        }
+      }
+    }
+
     try {
       final savings = totalIncome - totalExpense;
       final savingsPercentage = totalIncome > 0
@@ -113,20 +193,49 @@ Provide 2-3 specific, actionable spending advice points to optimize spending. Be
 Provide 3-4 practical saving tips specific to this financial profile. Include one emergency fund tip.''';
 
       final response = await _model.generateContent([Content.text(prompt)]);
-      return response.text ?? 'Unable to generate tips';
+      final tips = response.text ?? 'Unable to generate tips';
+
+      // Cache the result
+      if (_cacheService != null) {
+        await _cacheService!.cacheData(cacheKey, tips);
+        print('[CACHE] Cached saving tips');
+      }
+
+      return tips;
     } catch (e) {
       print('[AI ERROR] Error generating saving tips: $e');
       return 'Unable to generate tips at this time';
     }
   }
 
-  /// Get financial warnings
+  /// Get financial warnings based on budget and spending patterns
   Future<List<String>> getFinancialWarnings({
     required double totalIncome,
     required double totalExpense,
     required Map<String, double> categorySpending,
     required Map<String, double> budgetStatus,
+    bool forceRefresh = false,
   }) async {
+    const cacheKey = 'ai_financial_warnings';
+
+    // Check cache first
+    if (!forceRefresh && _cacheService != null) {
+      if (_cacheService!.isCacheValid(cacheKey)) {
+        try {
+          final cached = await _cacheService!.getCachedData<List<String>>(
+            cacheKey,
+            (json) => List<String>.from(json as List),
+          );
+          if (cached != null) {
+            print('[CACHE] Using cached financial warnings');
+            return cached;
+          }
+        } catch (e) {
+          print('[CACHE] Error reading cached warnings: $e');
+        }
+      }
+    }
+
     try {
       final warnings = <String>[];
 
@@ -174,6 +283,12 @@ Provide 3-4 practical saving tips specific to this financial profile. Include on
         }
       }
 
+      // Cache the result
+      if (_cacheService != null) {
+        await _cacheService!.cacheData(cacheKey, warnings);
+        print('[CACHE] Cached financial warnings');
+      }
+
       return warnings;
     } catch (e) {
       print('[AI ERROR] Error generating warnings: $e');
@@ -191,19 +306,23 @@ Provide 3-4 practical saving tips specific to this financial profile. Include on
     required int totalTransactions,
   }) {
     final savings = totalIncome - totalExpense;
-    final savingsRate = totalIncome > 0 ? ((savings / totalIncome) * 100) : 0;
+    final savingsPercentage = totalIncome > 0
+        ? ((savings / totalIncome) * 100)
+        : 0;
 
-    final trendAnalysis = monthlyTrend.isNotEmpty
-        ? 'Recent trend: ${monthlyTrend.map((m) => '${m['month']}: ${m['expense']}').join(', ')}'
-        : 'No trend data';
+    // Build trend analysis
+    String trendAnalysis = '';
+    if (monthlyTrend.isNotEmpty) {
+      trendAnalysis =
+          'Monthly trend: ${monthlyTrend.map((m) => '${m['month']}: ৳${(m['expense'] as num).toStringAsFixed(0)}').join(', ')}';
+    }
 
-    return '''You are a professional financial advisor. Analyze this person's finances and provide insights:
+    return '''Analyze this comprehensive financial data and provide detailed insights:
 
-FINANCIAL SUMMARY:
-- Total Income: ৳${totalIncome.toStringAsFixed(2)}
-- Total Expense: ৳${totalExpense.toStringAsFixed(2)}
-- Net Savings: ৳${savings.toStringAsFixed(2)}
-- Savings Rate: ${savingsRate.toStringAsFixed(1)}%
+FINANCIAL OVERVIEW:
+- Total Income (Monthly): ৳${totalIncome.toStringAsFixed(0)}
+- Total Expenses (Monthly): ৳${totalExpense.toStringAsFixed(0)}
+- Savings: ৳${savings.toStringAsFixed(0)} (${savingsPercentage.toStringAsFixed(1)}%)
 - Total Transactions: $totalTransactions
 
 SPENDING BREAKDOWN:
@@ -247,7 +366,29 @@ Format your response clearly with headers. Be specific and use the actual number
     required double totalIncome,
     required double totalExpense,
     required Map<String, double> categorySpending,
+    bool forceRefresh = false,
   }) async {
+    const cacheKey = 'ai_goal_insights';
+
+    // Check cache first
+    if (!forceRefresh && _cacheService != null) {
+      if (_cacheService!.isCacheValid(cacheKey)) {
+        try {
+          final cached = await _cacheService!
+              .getCachedData<Map<String, dynamic>>(
+                cacheKey,
+                (json) => Map<String, dynamic>.from(json as Map),
+              );
+          if (cached != null) {
+            print('[CACHE] Using cached goal insights');
+            return cached;
+          }
+        } catch (e) {
+          print('[CACHE] Error reading cached insights: $e');
+        }
+      }
+    }
+
     try {
       final prompt = _buildGoalInsightsPrompt(
         goals: goals,
@@ -257,9 +398,18 @@ Format your response clearly with headers. Be specific and use the actual number
       );
 
       final response = await _model.generateContent([Content.text(prompt)]);
-      final text = response.text ?? '';
+      final result = {
+        'insights': response.text ?? '',
+        'timestamp': DateTime.now().toIso8601String(),
+      };
 
-      return {'insights': text, 'timestamp': DateTime.now().toIso8601String()};
+      // Cache the result
+      if (_cacheService != null) {
+        await _cacheService!.cacheData(cacheKey, result);
+        print('[CACHE] Cached goal insights');
+      }
+
+      return result;
     } catch (e) {
       print('[AI ERROR] Error generating goal insights: $e');
       return {

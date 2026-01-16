@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/init/appwrite_client.dart';
 import '../../services/auth_service.dart';
 import '../../services/ai_service.dart';
 import '../../core/services/badge_service.dart';
+import '../../core/services/data_cache_service.dart';
 import '../expenses/services/expense_service.dart';
 import '../dashboard/services/analytics_service.dart';
 import '../budgets/models/budget_model.dart';
@@ -29,6 +31,8 @@ class _AIScreenState extends State<AIScreen> {
   bool _analyzingLoading = false;
 
   late ExpenseService _expenseService;
+  late DataCacheService _cacheService;
+  bool _isFirstLoad = true;
   late AnalyticsService _analyticsService;
   late BudgetService _budgetService;
 
@@ -52,6 +56,10 @@ class _AIScreenState extends State<AIScreen> {
   }
 
   Future<void> _init() async {
+    // Initialize cache service
+    final prefs = await SharedPreferences.getInstance();
+    _cacheService = DataCacheService(prefs: prefs);
+
     // Check for active session
     final hasSession = await _authService.hasActiveSession();
     if (!hasSession && mounted) {
@@ -75,7 +83,8 @@ class _AIScreenState extends State<AIScreen> {
       _initializeServices();
 
       // Fetch data
-      await _fetchData();
+      await _fetchData(forceRefresh: _isFirstLoad);
+      _isFirstLoad = false;
     }
   }
 
@@ -86,20 +95,25 @@ class _AIScreenState extends State<AIScreen> {
       databases: databases,
       databaseId: '143973bc-3217-4b7e-a1ca-05082dfde404',
       collectionId: '6962b3c600110543e89f',
+      cacheService: _cacheService,
     );
 
-    _analyticsService = AnalyticsService(expenseService: _expenseService);
+    _analyticsService = AnalyticsService(
+      expenseService: _expenseService,
+      cacheService: _cacheService,
+    );
 
     _budgetService = BudgetService(
       databases: databases,
       databaseId: '143973bc-3217-4b7e-a1ca-05082dfde404',
       collectionId: 'budgets',
+      cacheService: _cacheService,
     );
 
-    _aiService = AIService();
+    _aiService = AIService(cacheService: _cacheService);
   }
 
-  Future<void> _fetchData() async {
+  Future<void> _fetchData({bool forceRefresh = false}) async {
     if (_userId == null) return;
 
     try {
@@ -116,8 +130,10 @@ class _AIScreenState extends State<AIScreen> {
           _loading = false;
         });
 
-        // Generate AI analysis after data is loaded
-        await _generateAIAnalysis();
+        // Generate AI analysis after data is loaded (only on first load)
+        if (forceRefresh || _overallAnalysis.isEmpty) {
+          await _generateAIAnalysis(forceRefresh: forceRefresh);
+        }
       }
     } catch (e) {
       print('Error fetching data: $e');
@@ -225,7 +241,7 @@ class _AIScreenState extends State<AIScreen> {
     }
   }
 
-  Future<void> _generateAIAnalysis() async {
+  Future<void> _generateAIAnalysis({bool forceRefresh = false}) async {
     if (_userId == null || _totalIncome == 0) return;
 
     setState(() {
@@ -267,6 +283,7 @@ class _AIScreenState extends State<AIScreen> {
           monthlyTrend: _monthlyTrend,
           budgetStatus: budgetStatus,
           totalTransactions: totalTransactions,
+          forceRefresh: forceRefresh,
         );
         analysis = (result as Map)['analysis'] ?? 'Unable to generate analysis';
       } catch (e) {
@@ -278,6 +295,7 @@ class _AIScreenState extends State<AIScreen> {
         advice = await _aiService.getSpendingAdvice(
           categorySpending: _categorySpending,
           totalIncome: _totalIncome,
+          forceRefresh: forceRefresh,
         );
       } catch (e) {
         print('[AI ERROR] Error generating spending advice: $e');
@@ -289,6 +307,7 @@ class _AIScreenState extends State<AIScreen> {
           totalIncome: _totalIncome,
           totalExpense: _totalExpense,
           categorySpending: _categorySpending,
+          forceRefresh: forceRefresh,
         );
       } catch (e) {
         print('[AI ERROR] Error generating saving tips: $e');
@@ -301,6 +320,7 @@ class _AIScreenState extends State<AIScreen> {
           totalExpense: _totalExpense,
           categorySpending: _categorySpending,
           budgetStatus: budgetStatus,
+          forceRefresh: forceRefresh,
         );
       } catch (e) {
         print('[AI ERROR] Error generating warnings: $e');
@@ -486,6 +506,11 @@ class _AIScreenState extends State<AIScreen> {
                                 WarningsCard(
                                   warnings: _warnings,
                                   isLoading: _analyzingLoading,
+                                  onRetry: () async {
+                                    await _generateAIAnalysis(
+                                      forceRefresh: true,
+                                    );
+                                  },
                                 ),
                                 const SizedBox(height: 24),
 
@@ -496,6 +521,11 @@ class _AIScreenState extends State<AIScreen> {
                                   color: Colors.purple,
                                   content: _overallAnalysis,
                                   isLoading: _analyzingLoading,
+                                  onRetry: () async {
+                                    await _generateAIAnalysis(
+                                      forceRefresh: true,
+                                    );
+                                  },
                                 ),
                                 const SizedBox(height: 24),
 
@@ -506,6 +536,11 @@ class _AIScreenState extends State<AIScreen> {
                                   color: Colors.orange,
                                   content: _spendingAdvice,
                                   isLoading: _analyzingLoading,
+                                  onRetry: () async {
+                                    await _generateAIAnalysis(
+                                      forceRefresh: true,
+                                    );
+                                  },
                                 ),
                                 const SizedBox(height: 24),
 
@@ -516,6 +551,11 @@ class _AIScreenState extends State<AIScreen> {
                                   color: Colors.green,
                                   content: _savingTips,
                                   isLoading: _analyzingLoading,
+                                  onRetry: () async {
+                                    await _generateAIAnalysis(
+                                      forceRefresh: true,
+                                    );
+                                  },
                                 ),
                                 const SizedBox(height: 24),
 

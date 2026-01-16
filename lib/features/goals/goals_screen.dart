@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/init/appwrite_client.dart';
 import '../../services/auth_service.dart';
 import '../../services/ai_service.dart';
+import '../../core/services/data_cache_service.dart';
 import '../expenses/services/expense_service.dart';
 import '../dashboard/services/analytics_service.dart';
 import 'models/goal_model.dart';
@@ -24,10 +26,12 @@ class _GoalsScreenState extends State<GoalsScreen> {
   late ExpenseService _expenseService;
   late AnalyticsService _analyticsService;
   late AIService _aiService;
+  late DataCacheService _cacheService;
 
   String? _userId;
   bool _loading = true;
   bool _aiLoading = false;
+  bool _isFirstLoad = true;
   List<GoalModel> _goals = [];
   String _aiInsights = '';
 
@@ -43,6 +47,10 @@ class _GoalsScreenState extends State<GoalsScreen> {
   }
 
   Future<void> _init() async {
+    // Initialize cache service
+    final prefs = await SharedPreferences.getInstance();
+    _cacheService = DataCacheService(prefs: prefs);
+
     final hasSession = await _authService.hasActiveSession();
     if (!hasSession && mounted) {
       Navigator.pushReplacementNamed(context, '/');
@@ -61,7 +69,8 @@ class _GoalsScreenState extends State<GoalsScreen> {
       });
 
       _initializeServices();
-      await _fetchData();
+      await _fetchData(forceRefresh: _isFirstLoad);
+      _isFirstLoad = false;
     }
   }
 
@@ -78,13 +87,17 @@ class _GoalsScreenState extends State<GoalsScreen> {
       databases: databases,
       databaseId: '143973bc-3217-4b7e-a1ca-05082dfde404',
       collectionId: '6962b3c600110543e89f',
+      cacheService: _cacheService,
     );
 
-    _analyticsService = AnalyticsService(expenseService: _expenseService);
+    _analyticsService = AnalyticsService(
+      expenseService: _expenseService,
+      cacheService: _cacheService,
+    );
     _aiService = AIService();
   }
 
-  Future<void> _fetchData() async {
+  Future<void> _fetchData({bool forceRefresh = false}) async {
     if (_userId == null) return;
 
     setState(() {
@@ -95,9 +108,9 @@ class _GoalsScreenState extends State<GoalsScreen> {
       // Fetch goals and financial data in parallel
       await Future.wait([_fetchGoals(), _fetchFinancialContext()]);
 
-      // Generate AI insights if there are goals
-      if (_goals.isNotEmpty) {
-        await _generateAIInsights();
+      // Generate AI insights if there are goals (only on first load unless forceRefresh)
+      if (_goals.isNotEmpty && (forceRefresh || _aiInsights.isEmpty)) {
+        await _generateAIInsights(forceRefresh: forceRefresh);
       }
     } catch (e) {
       print('Error fetching data: $e');
@@ -165,7 +178,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
     }
   }
 
-  Future<void> _generateAIInsights() async {
+  Future<void> _generateAIInsights({bool forceRefresh = false}) async {
     if (_goals.isEmpty) return;
 
     setState(() {
@@ -192,6 +205,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
         totalIncome: _totalIncome,
         totalExpense: _totalExpense,
         categorySpending: _categorySpending,
+        forceRefresh: forceRefresh,
       );
 
       if (mounted) {
@@ -471,24 +485,38 @@ class _GoalsScreenState extends State<GoalsScreen> {
                             ),
                           ),
                           const SizedBox(width: 12),
-                          const Text(
-                            'AI Goal Insights',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                          Expanded(
+                            child: const Text(
+                              'AI Goal Insights',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
+                          if (!_aiLoading)
+                            IconButton(
+                              icon: const Icon(Icons.refresh),
+                              color: Colors.purple,
+                              onPressed: () async {
+                                await _generateAIInsights(forceRefresh: true);
+                              },
+                              tooltip: 'Refresh',
+                            ),
                         ],
                       ),
                       const SizedBox(height: 12),
-                      Text(
-                        _aiInsights,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[800],
-                          height: 1.5,
+                      if (_aiLoading)
+                        const Center(child: CircularProgressIndicator())
+                      else
+                        Text(
+                          _aiInsights,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[800],
+                            height: 1.5,
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),

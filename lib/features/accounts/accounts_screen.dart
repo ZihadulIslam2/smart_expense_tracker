@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/init/appwrite_client.dart';
 import '../../services/auth_service.dart';
+import '../../core/services/data_cache_service.dart';
 import '../expenses/services/expense_service.dart';
 import 'models/account_model.dart';
 import 'services/account_service.dart';
@@ -21,6 +23,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
   String? _userId;
   bool _loading = true;
 
+  late DataCacheService _cacheService;
+  bool _isFirstLoad = true;
   late AccountService _accountService;
   late ExpenseService _expenseService;
 
@@ -28,12 +32,17 @@ class _AccountsScreenState extends State<AccountsScreen> {
   Map<String, double> _accountBalances = {};
 
   @override
+  @override
   void initState() {
     super.initState();
     _init();
   }
 
   Future<void> _init() async {
+    // Initialize cache service
+    final prefs = await SharedPreferences.getInstance();
+    _cacheService = DataCacheService(prefs: prefs);
+
     // Check for active session
     final hasSession = await _authService.hasActiveSession();
     if (!hasSession && mounted) {
@@ -58,7 +67,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
       _initializeServices();
 
       // Fetch data
-      await _fetchData();
+      await _fetchData(forceRefresh: _isFirstLoad);
+      _isFirstLoad = false;
     }
   }
 
@@ -76,10 +86,11 @@ class _AccountsScreenState extends State<AccountsScreen> {
       databases: databases,
       databaseId: '143973bc-3217-4b7e-a1ca-05082dfde404',
       collectionId: '6962b3c600110543e89f',
+      cacheService: _cacheService,
     );
   }
 
-  Future<void> _fetchData() async {
+  Future<void> _fetchData({bool forceRefresh = false}) async {
     if (_userId == null) return;
 
     setState(() {

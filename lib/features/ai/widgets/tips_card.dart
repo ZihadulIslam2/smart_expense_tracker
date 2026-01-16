@@ -7,6 +7,7 @@ class TipsCard extends StatelessWidget {
   final Color color;
   final IconData icon;
   final bool isLoading;
+  final VoidCallback? onRetry;
 
   const TipsCard({
     super.key,
@@ -15,6 +16,7 @@ class TipsCard extends StatelessWidget {
     required this.color,
     required this.icon,
     this.isLoading = false,
+    this.onRetry,
   });
 
   @override
@@ -40,6 +42,13 @@ class TipsCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (onRetry != null && !isLoading)
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    color: color,
+                    onPressed: onRetry,
+                    tooltip: 'Refresh',
+                  ),
               ],
             ),
             const SizedBox(height: 16),

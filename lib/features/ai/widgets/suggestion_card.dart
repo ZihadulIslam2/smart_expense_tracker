@@ -7,6 +7,7 @@ class SuggestionCard extends StatelessWidget {
   final IconData icon;
   final Color color;
   final bool isLoading;
+  final VoidCallback? onRetry;
 
   const SuggestionCard({
     super.key,
@@ -15,6 +16,7 @@ class SuggestionCard extends StatelessWidget {
     required this.icon,
     required this.color,
     this.isLoading = false,
+    this.onRetry,
   });
 
   @override
@@ -39,6 +41,13 @@ class SuggestionCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (onRetry != null && !isLoading)
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    color: color,
+                    onPressed: onRetry,
+                    tooltip: 'Refresh',
+                  ),
               ],
             ),
             const SizedBox(height: 16),

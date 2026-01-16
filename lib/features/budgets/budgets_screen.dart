@@ -90,15 +90,19 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
       databases: databases,
       databaseId: '143973bc-3217-4b7e-a1ca-05082dfde404',
       collectionId: '6962b3c600110543e89f',
+      cacheService: _cacheService,
     );
   }
 
-  Future<void> _fetchData() async {
+  Future<void> _fetchData({bool forceRefresh = false}) async {
     if (_userId == null) return;
 
-    setState(() {
-      _loading = true;
-    });
+    // Only show loading on first load or force refresh
+    if (forceRefresh) {
+      setState(() {
+        _loading = true;
+      });
+    }
 
     try {
       // Fetch budgets for selected month
@@ -111,6 +115,7 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
       // Fetch transactions for selected month to calculate spending
       final transactions = await _expenseService.getUserTransactions(
         userId: _userId!,
+        forceRefresh: forceRefresh,
       );
 
       final monthlySpending = <String, double>{};
@@ -268,6 +273,7 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
     try {
       await _budgetService.updateBudget(
         budgetId: budgetId,
+        userId: _userId!,
         category: category,
         amount: amount,
       );
@@ -318,7 +324,10 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
 
     if (confirm == true && mounted) {
       try {
-        await _budgetService.deleteBudget(budgetId: budget.id);
+        await _budgetService.deleteBudget(
+          budgetId: budget.id,
+          userId: _userId!,
+        );
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -486,7 +495,7 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-              onRefresh: _fetchData,
+              onRefresh: () => _fetchData(forceRefresh: true),
               child: Column(
                 children: [
                   // Month Selector

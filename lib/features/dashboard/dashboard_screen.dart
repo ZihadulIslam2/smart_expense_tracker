@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:appwrite/models.dart' as models;
 import 'package:appwrite/appwrite.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/auth_service.dart';
+import '../../core/services/data_cache_service.dart';
 import '../expenses/services/expense_service.dart';
 import '../expenses/screens/add_expense_screen.dart';
 import '../expenses/screens/expense_list_screen.dart';
@@ -32,6 +34,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _loadingTotals = false;
   late ExpenseService _expenseService;
   late AnalyticsService _analyticsService;
+  late DataCacheService _cacheService;
+  bool _isFirstLoad = true;
   Map<String, double> _categorySpending = {};
   bool _loadingCategories = false;
   List<Map<String, dynamic>> _monthlyTrend = [];
@@ -49,6 +53,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _init() async {
     print('[DASHBOARD INIT] Starting dashboard initialization');
+
+    // Initialize cache service
+    final prefs = await SharedPreferences.getInstance();
+    _cacheService = DataCacheService(prefs: prefs);
 
     // Debug Gemini setup
     _aiService.debugGeminiSetup();
@@ -106,8 +114,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       databases: databases,
       databaseId: '143973bc-3217-4b7e-a1ca-05082dfde404',
       collectionId: '6962b3c600110543e89f',
+      cacheService: _cacheService,
     );
-    _analyticsService = AnalyticsService(expenseService: _expenseService);
+    _analyticsService = AnalyticsService(
+      expenseService: _expenseService,
+      cacheService: _cacheService,
+    );
   }
 
   Future<void> _fetchTotals() async {
@@ -324,6 +336,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // Use the existing Appwrite client
     final databases = Databases(AppwriteClient.client);
     final expenseService = ExpenseService(
+      cacheService: _cacheService,
       databases: databases,
       databaseId:
           '143973bc-3217-4b7e-a1ca-05082dfde404', // Replace with your database ID
