@@ -46,7 +46,6 @@ class TransactionModel {
       'category': category,
       'date': date.toIso8601String(),
       'description': description ?? '',
-      'accountId': accountId ?? '',
     };
   }
 
