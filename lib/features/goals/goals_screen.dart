@@ -71,7 +71,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
     _goalService = GoalService(
       databases: databases,
       databaseId: '143973bc-3217-4b7e-a1ca-05082dfde404',
-      collectionId: 'goals',
+      collectionId: '696a29970026248c4dcf',
     );
 
     _expenseService = ExpenseService(
