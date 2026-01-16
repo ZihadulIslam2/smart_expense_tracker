@@ -6,6 +6,7 @@ import 'package:smart_expense_tracker/features/accounts/accounts_screen.dart';
 import 'package:smart_expense_tracker/features/ai/ai_screen.dart';
 import 'package:smart_expense_tracker/features/goals/goals_screen.dart';
 import 'package:smart_expense_tracker/core/services/badge_service.dart';
+import 'package:smart_expense_tracker/features/home/widgets/app_drawer.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -128,7 +129,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    // Tab titles for the app bar
+    final tabTitles = [
+      'Records',
+      'Analysis',
+      'Budgets',
+      'Accounts',
+      'AI Insights',
+      'Goals',
+    ];
+
     return Scaffold(
+      appBar: AppBar(
+        title: Text(tabTitles[_currentIndex]),
+        elevation: 0,
+        centerTitle: true,
+      ),
+      drawer: const AppDrawer(),
       body: PageView(
         controller: _pageController,
         onPageChanged: (index) {
