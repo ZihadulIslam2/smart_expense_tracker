@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/widgets/markdown_text_widget.dart';
 
 class AIGoalsCard extends StatelessWidget {
   final String goalsAdvice;
@@ -49,15 +50,13 @@ class AIGoalsCard extends StatelessWidget {
                       fontStyle: FontStyle.italic,
                     ),
                   )
-                : SingleChildScrollView(
-                    scrollDirection: Axis.vertical,
-                    child: Text(
-                      goalsAdvice,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.green[900],
-                        height: 1.5,
-                      ),
+                : MarkdownTextWidget(
+                    markdown: goalsAdvice,
+                    accentColor: Colors.green[700],
+                    baseStyle: TextStyle(
+                      fontSize: 13,
+                      color: Colors.green[900],
+                      height: 1.5,
                     ),
                   ),
           ],

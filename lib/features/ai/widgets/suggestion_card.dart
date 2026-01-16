@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/widgets/markdown_text_widget.dart';
 
 /// Widget to display AI suggestions with formatted text
 class SuggestionCard extends StatelessWidget {
@@ -54,9 +55,10 @@ class SuggestionCard extends StatelessWidget {
             if (isLoading)
               const Center(child: CircularProgressIndicator())
             else
-              SelectableText(
-                content,
-                style: TextStyle(
+              MarkdownTextWidget(
+                markdown: content,
+                accentColor: color,
+                baseStyle: TextStyle(
                   fontSize: 14,
                   height: 1.6,
                   color: Colors.grey[800],

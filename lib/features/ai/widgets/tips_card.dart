@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/widgets/markdown_text_widget.dart';
 
 /// Widget to display tips and advice
 class TipsCard extends StatelessWidget {
@@ -55,9 +56,10 @@ class TipsCard extends StatelessWidget {
             if (isLoading)
               const Center(child: CircularProgressIndicator())
             else
-              SelectableText(
-                content,
-                style: TextStyle(
+              MarkdownTextWidget(
+                markdown: content,
+                accentColor: color,
+                baseStyle: TextStyle(
                   fontSize: 14,
                   height: 1.6,
                   color: Colors.grey[800],

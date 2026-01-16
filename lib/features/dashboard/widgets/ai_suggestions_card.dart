@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/widgets/markdown_text_widget.dart';
 
 class AISuggestionsCard extends StatelessWidget {
   final String suggestions;
@@ -53,15 +54,13 @@ class AISuggestionsCard extends StatelessWidget {
                       fontStyle: FontStyle.italic,
                     ),
                   )
-                : SingleChildScrollView(
-                    scrollDirection: Axis.vertical,
-                    child: Text(
-                      suggestions,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.blue[900],
-                        height: 1.5,
-                      ),
+                : MarkdownTextWidget(
+                    markdown: suggestions,
+                    accentColor: Colors.blue[700],
+                    baseStyle: TextStyle(
+                      fontSize: 13,
+                      color: Colors.blue[900],
+                      height: 1.5,
                     ),
                   ),
           ],
