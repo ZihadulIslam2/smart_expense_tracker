@@ -68,7 +68,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
     _accountService = AccountService(
       databases: databases,
       databaseId: '143973bc-3217-4b7e-a1ca-05082dfde404',
-      collectionId: 'accounts', // You'll need to create this collection
+      collectionId: '696a268b002b9cbfa3d3', // You'll need to create this collection
     );
 
     _expenseService = ExpenseService(
