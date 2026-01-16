@@ -5,6 +5,7 @@ import 'package:smart_expense_tracker/core/theme/app_theme.dart';
 import 'package:smart_expense_tracker/core/services/notification_service.dart';
 import 'package:smart_expense_tracker/features/auth/login_screen.dart';
 import 'package:smart_expense_tracker/features/auth/register_screen.dart';
+import 'package:smart_expense_tracker/features/home/home_screen.dart';
 import 'package:smart_expense_tracker/features/dashboard/dashboard_screen.dart';
 import 'package:smart_expense_tracker/features/education/education_screen.dart';
 import 'package:smart_expense_tracker/features/settings/settings_screen.dart';
@@ -43,7 +44,8 @@ class MyApp extends StatelessWidget {
       routes: {
         '/': (context) => const LoginScreen(),
         '/register': (context) => const RegisterScreen(),
-        '/home': (context) => const DashboardScreen(),
+        '/home': (context) => const HomeScreen(),
+        '/dashboard': (context) => const DashboardScreen(),
         '/education': (context) => const EducationScreen(),
         '/settings': (context) => const SettingsScreen(),
       },

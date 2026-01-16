@@ -7,6 +7,7 @@ class TransactionModel {
   final String category;
   final DateTime date;
   final String? description;
+  final String? accountId; // Optional: links to specific account
 
   TransactionModel({
     required this.id,
@@ -17,6 +18,7 @@ class TransactionModel {
     required this.category,
     required this.date,
     this.description,
+    this.accountId,
   });
 
   /// Convert Appwrite Document to TransactionModel
@@ -30,6 +32,7 @@ class TransactionModel {
       category: map['category'] ?? '',
       date: DateTime.tryParse(map['date'] ?? '') ?? DateTime.now(),
       description: map['description'],
+      accountId: map['accountId'],
     );
   }
 
@@ -43,6 +46,7 @@ class TransactionModel {
       'category': category,
       'date': date.toIso8601String(),
       'description': description ?? '',
+      'accountId': accountId ?? '',
     };
   }
 
@@ -56,6 +60,7 @@ class TransactionModel {
     String? category,
     DateTime? date,
     String? description,
+    String? accountId,
   }) {
     return TransactionModel(
       id: id ?? this.id,
@@ -66,12 +71,13 @@ class TransactionModel {
       category: category ?? this.category,
       date: date ?? this.date,
       description: description ?? this.description,
+      accountId: accountId ?? this.accountId,
     );
   }
 
   @override
   String toString() {
-    return 'TransactionModel(id: $id, userId: $userId, title: $title, amount: $amount, type: $type, category: $category, date: $date, description: $description)';
+    return 'TransactionModel(id: $id, userId: $userId, title: $title, amount: $amount, type: $type, category: $category, date: $date, description: $description, accountId: $accountId)';
   }
 
   @override
@@ -86,7 +92,8 @@ class TransactionModel {
         other.type == type &&
         other.category == category &&
         other.date == date &&
-        other.description == description;
+        other.description == description &&
+        other.accountId == accountId;
   }
 
   @override
@@ -98,6 +105,7 @@ class TransactionModel {
         type.hashCode ^
         category.hashCode ^
         date.hashCode ^
-        description.hashCode;
+        description.hashCode ^
+        accountId.hashCode;
   }
 }
