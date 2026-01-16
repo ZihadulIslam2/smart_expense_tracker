@@ -3,6 +3,7 @@ import 'package:appwrite/appwrite.dart';
 import '../../core/init/appwrite_client.dart';
 import '../../services/auth_service.dart';
 import '../../services/ai_service.dart';
+import '../../core/services/badge_service.dart';
 import '../expenses/services/expense_service.dart';
 import '../dashboard/services/analytics_service.dart';
 import '../budgets/models/budget_model.dart';
@@ -20,6 +21,7 @@ class AIScreen extends StatefulWidget {
 
 class _AIScreenState extends State<AIScreen> {
   final _authService = AuthService();
+  final _badgeService = BadgeService();
   late AIService _aiService;
 
   String? _userId;
@@ -313,6 +315,11 @@ class _AIScreenState extends State<AIScreen> {
           _warnings = warnings;
           _analyzingLoading = false;
         });
+
+        // Set AI tip badge when new insights are generated
+        if (analysis.isNotEmpty || advice.isNotEmpty || tips.isNotEmpty) {
+          _badgeService.setNewAITip(true);
+        }
       }
     } catch (e) {
       print('[AI ERROR] Unexpected error: $e');

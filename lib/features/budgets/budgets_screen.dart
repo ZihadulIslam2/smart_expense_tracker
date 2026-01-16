@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import '../../core/init/appwrite_client.dart';
 import '../../services/auth_service.dart';
+import '../../core/services/badge_service.dart';
 import '../expenses/services/expense_service.dart';
 import 'models/budget_model.dart';
 import 'services/budget_service.dart';
@@ -17,6 +18,7 @@ class BudgetsScreen extends StatefulWidget {
 
 class _BudgetsScreenState extends State<BudgetsScreen> {
   final _authService = AuthService();
+  final _badgeService = BadgeService();
 
   String? _userId;
   bool _loading = true;
@@ -118,6 +120,9 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
           _categorySpending = monthlySpending;
           _loading = false;
         });
+
+        // Check for budget exceeded and update badge
+        _checkBudgetExceeded();
       }
     } catch (e) {
       print('Error fetching budget data: $e');
@@ -133,6 +138,23 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
         );
       }
     }
+  }
+
+  /// Check if any budgets are exceeded and update badge
+  void _checkBudgetExceeded() {
+    int exceededCount = 0;
+    for (var budget in _budgets) {
+      final spent = _categorySpending[budget.category] ?? 0.0;
+      if (spent > budget.amount) {
+        exceededCount++;
+      }
+    }
+
+    // Update badge service
+    _badgeService.setBudgetWarning(
+      exceededCount > 0,
+      exceededCount: exceededCount,
+    );
   }
 
   Future<void> _showAddBudgetDialog() async {
