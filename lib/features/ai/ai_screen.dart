@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/init/appwrite_client.dart';
 import '../../services/auth_service.dart';
 import '../../services/ai_service.dart';
+import '../../services/preload_service.dart';
 import '../../core/services/badge_service.dart';
 import '../../core/services/data_cache_service.dart';
 import '../expenses/services/expense_service.dart';
@@ -242,7 +243,7 @@ class _AIScreenState extends State<AIScreen> {
   }
 
   Future<void> _generateAIAnalysis({bool forceRefresh = false}) async {
-    if (_userId == null || _totalIncome == 0) return;
+    if (_userId == null) return;
 
     setState(() {
       _analyzingLoading = true;
@@ -269,13 +270,15 @@ class _AIScreenState extends State<AIScreen> {
         print('Error getting transaction count: $e');
       }
 
-      // Generate each analysis separately with error handling
+      // Only use cached data - don't make new API calls
+      // The data was preloaded at app startup via PreloadService
       String analysis = '';
       String advice = '';
       String tips = '';
       List<String> warnings = [];
 
       try {
+        print('[AI SCREEN] Loading analysis from cache (preloaded data)...');
         final result = await _aiService.getFinancialAnalysis(
           totalIncome: _totalIncome,
           totalExpense: _totalExpense,
@@ -283,23 +286,23 @@ class _AIScreenState extends State<AIScreen> {
           monthlyTrend: _monthlyTrend,
           budgetStatus: budgetStatus,
           totalTransactions: totalTransactions,
-          forceRefresh: forceRefresh,
+          forceRefresh: false, // Always use cache, never refresh
         );
         analysis = (result as Map)['analysis'] ?? 'Unable to generate analysis';
       } catch (e) {
-        print('[AI ERROR] Error generating analysis: $e');
-        analysis = 'Unable to generate analysis. Please try again later.';
+        print('[AI ERROR] Error loading analysis: $e');
+        analysis = 'Unable to load analysis. Please try again later.';
       }
 
       try {
         advice = await _aiService.getSpendingAdvice(
           categorySpending: _categorySpending,
           totalIncome: _totalIncome,
-          forceRefresh: forceRefresh,
+          forceRefresh: false, // Always use cache
         );
       } catch (e) {
-        print('[AI ERROR] Error generating spending advice: $e');
-        advice = 'Unable to generate spending advice. Please try again later.';
+        print('[AI ERROR] Error loading spending advice: $e');
+        advice = 'Unable to load spending advice. Please try again later.';
       }
 
       try {
@@ -307,11 +310,11 @@ class _AIScreenState extends State<AIScreen> {
           totalIncome: _totalIncome,
           totalExpense: _totalExpense,
           categorySpending: _categorySpending,
-          forceRefresh: forceRefresh,
+          forceRefresh: false, // Always use cache
         );
       } catch (e) {
-        print('[AI ERROR] Error generating saving tips: $e');
-        tips = 'Unable to generate saving tips. Please try again later.';
+        print('[AI ERROR] Error loading saving tips: $e');
+        tips = 'Unable to load saving tips. Please try again later.';
       }
 
       try {
@@ -320,11 +323,11 @@ class _AIScreenState extends State<AIScreen> {
           totalExpense: _totalExpense,
           categorySpending: _categorySpending,
           budgetStatus: budgetStatus,
-          forceRefresh: forceRefresh,
+          forceRefresh: false, // Always use cache
         );
       } catch (e) {
-        print('[AI ERROR] Error generating warnings: $e');
-        warnings = ['Unable to generate financial warnings'];
+        print('[AI ERROR] Error loading warnings: $e');
+        warnings = ['Unable to load financial warnings'];
       }
 
       if (mounted) {
@@ -336,7 +339,7 @@ class _AIScreenState extends State<AIScreen> {
           _analyzingLoading = false;
         });
 
-        // Set AI tip badge when new insights are generated
+        // Set AI tip badge when new insights are loaded
         if (analysis.isNotEmpty || advice.isNotEmpty || tips.isNotEmpty) {
           _badgeService.setNewAITip(true);
         }

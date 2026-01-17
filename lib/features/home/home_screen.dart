@@ -6,6 +6,8 @@ import 'package:smart_expense_tracker/features/accounts/accounts_screen.dart';
 import 'package:smart_expense_tracker/features/ai/ai_screen.dart';
 import 'package:smart_expense_tracker/features/goals/goals_screen.dart';
 import 'package:smart_expense_tracker/core/services/badge_service.dart';
+import 'package:smart_expense_tracker/services/preload_service.dart';
+import 'package:smart_expense_tracker/services/auth_service.dart';
 import 'package:smart_expense_tracker/features/home/widgets/app_drawer.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -20,6 +22,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late PageController _pageController;
   late AnimationController _fabAnimationController;
   final BadgeService _badgeService = BadgeService();
+  final _authService = AuthService();
+  final _preloadService = PreloadService();
 
   // List of screens corresponding to each tab
   final List<Widget> _screens = const [
@@ -40,6 +44,40 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 300),
     );
     _fabAnimationController.forward();
+
+    // Trigger background AI preload on app startup
+    _triggerAIPreload();
+  }
+
+  /// Trigger background preload of AI analysis
+  Future<void> _triggerAIPreload() async {
+    try {
+      // Get current user
+      final user = await _authService.getCurrentUser();
+      if (user == null) return;
+
+      // Fetch goals if needed
+      List<Map<String, dynamic>> goals = [];
+      try {
+        // You may need to adjust this based on your goals service
+        goals = []; // Will be fetched in PreloadService if needed
+      } catch (e) {
+        print('[HOME] Error fetching goals for preload: $e');
+      }
+
+      // Start preloading in background (non-blocking)
+      print('[HOME] Starting background AI preload...');
+      _preloadService
+          .preloadAIAnalysis(userId: user.$id, goals: goals)
+          .then((_) {
+            print('[HOME] ✓ Background preload completed');
+          })
+          .catchError((e) {
+            print('[HOME] Error in background preload: $e');
+          });
+    } catch (e) {
+      print('[HOME] Error triggering preload: $e');
+    }
   }
 
   @override

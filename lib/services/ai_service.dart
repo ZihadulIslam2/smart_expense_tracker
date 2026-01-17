@@ -19,7 +19,7 @@ class AIService {
 
   void _initializeModel() {
     _model = GenerativeModel(
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-2.5-flash',
       apiKey: _apiKey,
       safetySettings: [
         SafetySetting(HarmCategory.harassment, HarmBlockThreshold.none),
@@ -40,49 +40,23 @@ class AIService {
     required int totalTransactions,
     bool forceRefresh = false,
   }) async {
-    const cacheKey = 'ai_financial_analysis';
-
-    // Check cache first
-    if (!forceRefresh && _cacheService != null) {
-      if (_cacheService!.isCacheValid(cacheKey)) {
-        try {
-          final cached = await _cacheService!
-              .getCachedData<Map<String, dynamic>>(
-                cacheKey,
-                (json) => Map<String, dynamic>.from(json as Map),
-              );
-          if (cached != null) {
-            print('[CACHE] Using cached financial analysis');
-            return cached;
-          }
-        } catch (e) {
-          print('[CACHE] Error reading cached analysis: $e');
-        }
-      }
-    }
-
     try {
-      final prompt = _buildFinancialAnalysisPrompt(
+      final comprehensiveData = await _getComprehensiveAnalysis(
         totalIncome: totalIncome,
         totalExpense: totalExpense,
         categorySpending: categorySpending,
         monthlyTrend: monthlyTrend,
         budgetStatus: budgetStatus,
         totalTransactions: totalTransactions,
+        forceRefresh: forceRefresh,
       );
 
-      final response = await _model.generateContent([Content.text(prompt)]);
-      final result = _parseFinancialAnalysis(response.text ?? '');
-
-      // Cache the result
-      if (_cacheService != null) {
-        await _cacheService!.cacheData(cacheKey, result);
-        print('[CACHE] Cached financial analysis');
-      }
-
-      return result;
+      return {
+        'analysis': comprehensiveData['financial_analysis'] ?? '',
+        'timestamp': DateTime.now().toIso8601String(),
+      };
     } catch (e) {
-      print('[AI ERROR] Error generating financial analysis: $e');
+      print('[AI ERROR] Error getting financial analysis: $e');
       return {
         'analysis': 'Unable to generate analysis',
         'timestamp': DateTime.now().toIso8601String(),
@@ -96,56 +70,21 @@ class AIService {
     required double totalIncome,
     bool forceRefresh = false,
   }) async {
-    const cacheKey = 'ai_spending_advice';
-
-    // Check cache first
-    if (!forceRefresh && _cacheService != null) {
-      if (_cacheService!.isCacheValid(cacheKey)) {
-        try {
-          final cached = await _cacheService!.getCachedData<String>(
-            cacheKey,
-            (json) => json.toString(),
-          );
-          if (cached != null) {
-            print('[CACHE] Using cached spending advice');
-            return cached;
-          }
-        } catch (e) {
-          print('[CACHE] Error reading cached advice: $e');
-        }
-      }
-    }
-
     try {
-      final topCategory = _getTopCategory(categorySpending);
-      final totalSpending = categorySpending.values.fold<double>(
-        0.0,
-        (a, b) => a + b,
+      final comprehensiveData = await _getComprehensiveAnalysis(
+        totalIncome: totalIncome,
+        totalExpense: categorySpending.values.fold(0.0, (a, b) => a + b),
+        categorySpending: categorySpending,
+        monthlyTrend: [],
+        budgetStatus: {},
+        totalTransactions: 0,
+        forceRefresh: forceRefresh,
       );
-      final savingsRate = totalIncome > 0
-          ? (((totalIncome - totalSpending) / totalIncome) * 100)
-          : 0;
 
-      final prompt =
-          '''Based on this spending profile:
-- Top spending category: $topCategory
-- Savings rate: ${savingsRate.toStringAsFixed(1)}%
-- Categories: ${categorySpending.entries.map((e) => '${e.key}: ৳${e.value.toStringAsFixed(0)}').join(', ')}
-
-Provide 2-3 specific, actionable spending advice points to optimize spending. Be concise and practical.''';
-
-      final response = await _model.generateContent([Content.text(prompt)]);
-      final advice = response.text ?? 'Unable to generate advice';
-
-      // Cache the result
-      if (_cacheService != null) {
-        await _cacheService!.cacheData(cacheKey, advice);
-        print('[CACHE] Cached spending advice');
-      }
-
-      return advice;
+      return comprehensiveData['spending_advice'] ??
+          'Unable to generate advice';
     } catch (e) {
-      print('[AI ERROR] Error generating spending advice: $e');
+      print('[AI ERROR] Error getting spending advice: $e');
       return 'Unable to generate advice at this time';
     }
   }
@@ -157,53 +96,20 @@ Provide 2-3 specific, actionable spending advice points to optimize spending. Be
     required Map<String, double> categorySpending,
     bool forceRefresh = false,
   }) async {
-    const cacheKey = 'ai_saving_tips';
-
-    // Check cache first
-    if (!forceRefresh && _cacheService != null) {
-      if (_cacheService!.isCacheValid(cacheKey)) {
-        try {
-          final cached = await _cacheService!.getCachedData<String>(
-            cacheKey,
-            (json) => json.toString(),
-          );
-          if (cached != null) {
-            print('[CACHE] Using cached saving tips');
-            return cached;
-          }
-        } catch (e) {
-          print('[CACHE] Error reading cached tips: $e');
-        }
-      }
-    }
-
     try {
-      final savings = totalIncome - totalExpense;
-      final savingsPercentage = totalIncome > 0
-          ? ((savings / totalIncome) * 100)
-          : 0;
+      final comprehensiveData = await _getComprehensiveAnalysis(
+        totalIncome: totalIncome,
+        totalExpense: totalExpense,
+        categorySpending: categorySpending,
+        monthlyTrend: [],
+        budgetStatus: {},
+        totalTransactions: 0,
+        forceRefresh: forceRefresh,
+      );
 
-      final prompt =
-          '''Given this financial situation:
-- Monthly income: ৳${totalIncome.toStringAsFixed(0)}
-- Monthly expense: ৳${totalExpense.toStringAsFixed(0)}
-- Current savings: ৳${savings.toStringAsFixed(0)} (${savingsPercentage.toStringAsFixed(1)}%)
-- Spending breakdown: ${categorySpending.entries.map((e) => '${e.key}: ৳${e.value.toStringAsFixed(0)}').join(', ')}
-
-Provide 3-4 practical saving tips specific to this financial profile. Include one emergency fund tip.''';
-
-      final response = await _model.generateContent([Content.text(prompt)]);
-      final tips = response.text ?? 'Unable to generate tips';
-
-      // Cache the result
-      if (_cacheService != null) {
-        await _cacheService!.cacheData(cacheKey, tips);
-        print('[CACHE] Cached saving tips');
-      }
-
-      return tips;
+      return comprehensiveData['saving_tips'] ?? 'Unable to generate tips';
     } catch (e) {
-      print('[AI ERROR] Error generating saving tips: $e');
+      print('[AI ERROR] Error getting saving tips: $e');
       return 'Unable to generate tips at this time';
     }
   }
@@ -216,94 +122,39 @@ Provide 3-4 practical saving tips specific to this financial profile. Include on
     required Map<String, double> budgetStatus,
     bool forceRefresh = false,
   }) async {
-    const cacheKey = 'ai_financial_warnings';
-
-    // Check cache first
-    if (!forceRefresh && _cacheService != null) {
-      if (_cacheService!.isCacheValid(cacheKey)) {
-        try {
-          final cached = await _cacheService!.getCachedData<List<String>>(
-            cacheKey,
-            (json) => List<String>.from(json as List),
-          );
-          if (cached != null) {
-            print('[CACHE] Using cached financial warnings');
-            return cached;
-          }
-        } catch (e) {
-          print('[CACHE] Error reading cached warnings: $e');
-        }
-      }
-    }
-
     try {
-      final warnings = <String>[];
-
-      // Check if overspending
-      if (totalExpense > totalIncome) {
-        warnings.add(
-          '⚠️ OVERSPENDING: You\'re spending ৳${(totalExpense - totalIncome).toStringAsFixed(2)} more than income',
-        );
-      }
-
-      // Check over-budget categories
-      final overBudgetCategories = budgetStatus.entries
-          .where((e) => e.value > 1.0)
-          .map((e) => e.key)
-          .toList();
-      if (overBudgetCategories.isNotEmpty) {
-        warnings.add(
-          '🔴 OVER BUDGET: ${overBudgetCategories.join(", ")} exceeded limits',
-        );
-      }
-
-      // Check if spending is too high in any category
-      final totalSpending = categorySpending.values.fold(
-        0.0,
-        (sum, a) => sum + a,
+      final comprehensiveData = await _getComprehensiveAnalysis(
+        totalIncome: totalIncome,
+        totalExpense: totalExpense,
+        categorySpending: categorySpending,
+        monthlyTrend: [],
+        budgetStatus: budgetStatus,
+        totalTransactions: 0,
+        forceRefresh: forceRefresh,
       );
-      if (totalSpending > 0) {
-        for (var entry in categorySpending.entries) {
-          final percentage = (entry.value / totalSpending) * 100;
-          if (percentage > 40) {
-            warnings.add(
-              '📊 ALERT: ${entry.key} represents ${percentage.toStringAsFixed(1)}% of spending',
-            );
-          }
-        }
-      }
 
-      // Check savings rate
-      if (totalIncome > 0) {
-        final savingsRate = ((totalIncome - totalExpense) / totalIncome) * 100;
-        if (savingsRate < 10) {
-          warnings.add(
-            '💾 LOW SAVINGS: Only saving ${savingsRate.toStringAsFixed(1)}% of income',
-          );
-        }
-      }
+      final warningsText = comprehensiveData['financial_warnings'] ?? '';
+      if (warningsText.isEmpty) return [];
 
-      // Cache the result
-      if (_cacheService != null) {
-        await _cacheService!.cacheData(cacheKey, warnings);
-        print('[CACHE] Cached financial warnings');
-      }
-
-      return warnings;
+      return warningsText
+          .split('\n')
+          .where((line) => line.trim().isNotEmpty)
+          .toList();
     } catch (e) {
-      print('[AI ERROR] Error generating warnings: $e');
+      print('[AI ERROR] Error getting financial warnings: $e');
       return ['Unable to generate warnings'];
     }
   }
 
-  /// Build detailed financial analysis prompt
-  String _buildFinancialAnalysisPrompt({
+  /// Build comprehensive prompt for all financial analysis in one go
+  String _buildComprehensivePrompt({
     required double totalIncome,
     required double totalExpense,
     required Map<String, double> categorySpending,
     required List<Map<String, dynamic>> monthlyTrend,
     required Map<String, double> budgetStatus,
     required int totalTransactions,
+    required List<Map<String, dynamic>> goals,
   }) {
     final savings = totalIncome - totalExpense;
     final savingsPercentage = totalIncome > 0
@@ -317,39 +168,53 @@ Provide 3-4 practical saving tips specific to this financial profile. Include on
           'Monthly trend: ${monthlyTrend.map((m) => '${m['month']}: ৳${(m['expense'] as num).toStringAsFixed(0)}').join(', ')}';
     }
 
-    return '''Analyze this comprehensive financial data and provide detailed insights:
+    final topCategory = _getTopCategory(categorySpending);
+    final totalSpending = categorySpending.values.fold<double>(
+      0.0,
+      (a, b) => a + b,
+    );
 
-FINANCIAL OVERVIEW:
-- Total Income (Monthly): ৳${totalIncome.toStringAsFixed(0)}
-- Total Expenses (Monthly): ৳${totalExpense.toStringAsFixed(0)}
+    return '''You are a financial advisor AI. Analyze this comprehensive financial data and provide insights in the exact format below. Respond with ONLY these sections in this order.
+
+[FINANCIAL_OVERVIEW_DATA]
+- Total Income: ৳${totalIncome.toStringAsFixed(0)}
+- Total Expenses: ৳${totalExpense.toStringAsFixed(0)}
 - Savings: ৳${savings.toStringAsFixed(0)} (${savingsPercentage.toStringAsFixed(1)}%)
 - Total Transactions: $totalTransactions
 
-SPENDING BREAKDOWN:
+[SPENDING_DATA]
 ${categorySpending.entries.map((e) => '- ${e.key}: ৳${e.value.toStringAsFixed(2)}').join('\n')}
 
-BUDGET STATUS:
-${budgetStatus.entries.map((e) => '- ${e.key}: ${(e.value * 100).toStringAsFixed(0)}% of budget used').join('\n')}
+[BUDGET_STATUS]
+${budgetStatus.entries.map((e) => '- ${e.key}: ${(e.value * 100).toStringAsFixed(0)}% of budget').join('\n')}
 
-TRENDS:
+[TRENDS]
 $trendAnalysis
 
-Please provide:
-1. Overall financial health assessment (1-2 sentences)
-2. Key strengths (2-3 bullet points)
-3. Areas of concern (2-3 bullet points)
-4. Specific action items (3-4 recommendations)
-5. Positive note (1 encouraging sentence)
+[GOALS_DATA]
+${goals.isNotEmpty ? goals.asMap().entries.map((entry) {
+            final goal = entry.value;
+            return '${entry.key + 1}. ${goal['title']} - Target: ৳${goal['targetAmount']}, Current: ৳${goal['currentAmount']}, Progress: ${goal['progress']}%';
+          }).join('\n') : 'No goals set'}
 
-Format your response clearly with headers. Be specific and use the actual numbers provided.''';
-  }
+---
 
-  /// Parse financial analysis response
-  Map<String, dynamic> _parseFinancialAnalysis(String response) {
-    return {
-      'analysis': response,
-      'timestamp': DateTime.now().toIso8601String(),
-    };
+Now provide responses for each section. Use these exact headers for each section:
+
+[FINANCIAL_ANALYSIS]
+Provide: 1) Overall financial health assessment (1-2 short sentences), 2) Key strengths (2-3 bullet points), 3) Areas of concern (2-3 bullet points), 4) Specific action items (2 recommendations), 5) Positive note (1 encouraging sentence)
+
+[SPENDING_ADVICE]
+Provide: 2-3 specific, actionable spending advice points based on the spending profile. Top category: $topCategory. Savings rate: ${savingsPercentage.toStringAsFixed(1)}%. Be concise and practical.
+
+[SAVING_TIPS]
+Provide: 3-4 practical saving tips specific to this financial profile. Include one emergency fund tip. Total spending: ৳${totalSpending.toStringAsFixed(0)}
+
+[FINANCIAL_WARNINGS]
+Provide: List each warning on a new line. Check: 1) Overspending (expense > income), 2) Over-budget categories, 3) Categories > 40% of spending, 4) Savings rate < 10%. Format: ⚠️ or 🔴 or 📊 or 💾 + warning text
+
+[GOAL_INSIGHTS]
+Provide: 1) Assessment of goal achievability, 2) Priority recommendations (which goals first), 3) Adjustment suggestions for monthly contributions, 4) Motivational insights, 5) Spending adjustments to meet goals faster. Keep to max 150 words.''';
   }
 
   /// Get top spending category
@@ -368,7 +233,43 @@ Format your response clearly with headers. Be specific and use the actual number
     required Map<String, double> categorySpending,
     bool forceRefresh = false,
   }) async {
-    const cacheKey = 'ai_goal_insights';
+    try {
+      final comprehensiveData = await _getComprehensiveAnalysis(
+        totalIncome: totalIncome,
+        totalExpense: totalExpense,
+        categorySpending: categorySpending,
+        monthlyTrend: [],
+        budgetStatus: {},
+        totalTransactions: 0,
+        forceRefresh: forceRefresh,
+        goals: goals,
+      );
+
+      return {
+        'insights': comprehensiveData['goal_insights'] ?? '',
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+    } catch (e) {
+      print('[AI ERROR] Error getting goal insights: $e');
+      return {
+        'insights': 'Unable to generate goal insights at this time.',
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+    }
+  }
+
+  /// Main method: Get comprehensive analysis with a single API call
+  Future<Map<String, dynamic>> _getComprehensiveAnalysis({
+    required double totalIncome,
+    required double totalExpense,
+    required Map<String, double> categorySpending,
+    required List<Map<String, dynamic>> monthlyTrend,
+    required Map<String, double> budgetStatus,
+    required int totalTransactions,
+    List<Map<String, dynamic>>? goals,
+    bool forceRefresh = false,
+  }) async {
+    const cacheKey = 'ai_comprehensive_analysis';
 
     // Check cache first
     if (!forceRefresh && _cacheService != null) {
@@ -380,88 +281,79 @@ Format your response clearly with headers. Be specific and use the actual number
                 (json) => Map<String, dynamic>.from(json as Map),
               );
           if (cached != null) {
-            print('[CACHE] Using cached goal insights');
+            print('[CACHE] Using cached comprehensive analysis');
             return cached;
           }
         } catch (e) {
-          print('[CACHE] Error reading cached insights: $e');
+          print('[CACHE] Error reading cached comprehensive analysis: $e');
         }
       }
     }
 
     try {
-      final prompt = _buildGoalInsightsPrompt(
-        goals: goals,
+      final prompt = _buildComprehensivePrompt(
         totalIncome: totalIncome,
         totalExpense: totalExpense,
         categorySpending: categorySpending,
+        monthlyTrend: monthlyTrend,
+        budgetStatus: budgetStatus,
+        totalTransactions: totalTransactions,
+        goals: goals ?? [],
       );
 
+      print('[AI] Making single comprehensive API call...');
       final response = await _model.generateContent([Content.text(prompt)]);
-      final result = {
-        'insights': response.text ?? '',
-        'timestamp': DateTime.now().toIso8601String(),
-      };
+      final responseText = response.text ?? '';
+
+      // Parse the response into sections
+      final result = _parseComprehensiveResponse(responseText);
 
       // Cache the result
       if (_cacheService != null) {
         await _cacheService!.cacheData(cacheKey, result);
-        print('[CACHE] Cached goal insights');
+        print('[CACHE] Cached comprehensive analysis');
       }
 
       return result;
     } catch (e) {
-      print('[AI ERROR] Error generating goal insights: $e');
+      print('[AI ERROR] Error generating comprehensive analysis: $e');
       return {
-        'insights': 'Unable to generate goal insights at this time.',
-        'timestamp': DateTime.now().toIso8601String(),
+        'financial_analysis': 'Unable to generate analysis',
+        'spending_advice': 'Unable to generate advice',
+        'saving_tips': 'Unable to generate tips',
+        'financial_warnings': '',
+        'goal_insights': 'Unable to generate insights',
       };
     }
   }
 
-  String _buildGoalInsightsPrompt({
-    required List<Map<String, dynamic>> goals,
-    required double totalIncome,
-    required double totalExpense,
-    required Map<String, double> categorySpending,
-  }) {
-    final buffer = StringBuffer();
-    buffer.writeln('As a financial advisor AI, analyze these financial goals:');
-    buffer.writeln();
-    buffer.writeln('FINANCIAL CONTEXT:');
-    buffer.writeln('- Monthly Income: ৳${totalIncome.toStringAsFixed(0)}');
-    buffer.writeln('- Monthly Expense: ৳${totalExpense.toStringAsFixed(0)}');
-    buffer.writeln(
-      '- Available for Savings: ৳${(totalIncome - totalExpense).toStringAsFixed(0)}',
-    );
-    buffer.writeln();
-    buffer.writeln('GOALS:');
+  /// Parse comprehensive response into sections
+  Map<String, dynamic> _parseComprehensiveResponse(String response) {
+    final sections = <String, String>{};
 
-    for (var i = 0; i < goals.length; i++) {
-      final goal = goals[i];
-      buffer.writeln('${i + 1}. ${goal['title']}');
-      buffer.writeln('   Target: ৳${goal['targetAmount']}');
-      buffer.writeln('   Current: ৳${goal['currentAmount']}');
-      buffer.writeln('   Remaining: ৳${goal['remaining']}');
-      buffer.writeln('   Progress: ${goal['progress']}%');
-      buffer.writeln('   Deadline: ${goal['deadline']}');
-      buffer.writeln('   Suggested Monthly: ৳${goal['suggestedMonthly']}');
-      buffer.writeln();
+    // Extract each section
+    final sectionKeys = [
+      'FINANCIAL_ANALYSIS',
+      'SPENDING_ADVICE',
+      'SAVING_TIPS',
+      'FINANCIAL_WARNINGS',
+      'GOAL_INSIGHTS',
+    ];
+
+    for (final key in sectionKeys) {
+      final pattern = RegExp(r'\[' + key + r'\](.*?)(?=\[|$)', dotAll: true);
+      final match = pattern.firstMatch(response);
+      if (match != null) {
+        sections[key.toLowerCase()] = match.group(1)?.trim() ?? '';
+      }
     }
 
-    buffer.writeln('Please provide:');
-    buffer.writeln('1. Assessment of goal achievability (realistic or not)');
-    buffer.writeln(
-      '2. Priority recommendations (which goals to focus on first)',
-    );
-    buffer.writeln(
-      '3. Adjustment suggestions (if monthly contributions seem too high/low)',
-    );
-    buffer.writeln('4. Motivational insights to stay on track');
-    buffer.writeln('5. Spending adjustments to meet goals faster');
-    buffer.writeln();
-    buffer.writeln('Keep response concise and actionable (max 200 words).');
-
-    return buffer.toString();
+    return {
+      'financial_analysis': sections['financial_analysis'] ?? '',
+      'spending_advice': sections['spending_advice'] ?? '',
+      'saving_tips': sections['saving_tips'] ?? '',
+      'financial_warnings': sections['financial_warnings'] ?? '',
+      'goal_insights': sections['goal_insights'] ?? '',
+    };
   }
 }
