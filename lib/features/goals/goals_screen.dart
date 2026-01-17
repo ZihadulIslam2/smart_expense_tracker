@@ -94,7 +94,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
       expenseService: _expenseService,
       cacheService: _cacheService,
     );
-    _aiService = AIService();
+    _aiService = AIService(cacheService: _cacheService);
   }
 
   Future<void> _fetchData({bool forceRefresh = false}) async {
@@ -110,9 +110,9 @@ class _GoalsScreenState extends State<GoalsScreen> {
 
       // Only use cached data - don't make new AI calls
       // The data was preloaded at app startup via PreloadService
-      // Only load AI insights on first load or explicit refresh
-      if (_goals.isNotEmpty && (forceRefresh || _aiInsights.isEmpty)) {
-        await _loadAIInsightsFromCache(forceRefresh: forceRefresh);
+      // Load AI insights only if empty (first time)
+      if (_goals.isNotEmpty && _aiInsights.isEmpty) {
+        await _loadAIInsightsFromCache();
       }
     } catch (e) {
       print('Error fetching data: $e');
@@ -206,14 +206,15 @@ class _GoalsScreenState extends State<GoalsScreen> {
       print(
         '[GOALS SCREEN] Loading goal insights from cache (preloaded data)...',
       );
-      // Only use cache unless explicitly refreshing
-      // forceRefresh is only true when user clicks the refresh button
+      // Always use cache by default (forceRefresh: false)
+      // Only refresh when explicitly called from refresh button
       final result = await _aiService.getGoalInsights(
         goals: goalsData,
         totalIncome: _totalIncome,
         totalExpense: _totalExpense,
         categorySpending: _categorySpending,
-        forceRefresh: forceRefresh,
+        forceRefresh:
+            forceRefresh, // Will be false by default, true only on manual refresh
       );
 
       if (mounted) {
