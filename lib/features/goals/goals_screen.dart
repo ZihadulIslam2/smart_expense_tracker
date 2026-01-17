@@ -108,9 +108,11 @@ class _GoalsScreenState extends State<GoalsScreen> {
       // Fetch goals and financial data in parallel
       await Future.wait([_fetchGoals(), _fetchFinancialContext()]);
 
-      // Generate AI insights if there are goals (only on first load unless forceRefresh)
+      // Only use cached data - don't make new AI calls
+      // The data was preloaded at app startup via PreloadService
+      // Only load AI insights on first load or explicit refresh
       if (_goals.isNotEmpty && (forceRefresh || _aiInsights.isEmpty)) {
-        await _generateAIInsights(forceRefresh: forceRefresh);
+        await _loadAIInsightsFromCache(forceRefresh: forceRefresh);
       }
     } catch (e) {
       print('Error fetching data: $e');
@@ -178,7 +180,8 @@ class _GoalsScreenState extends State<GoalsScreen> {
     }
   }
 
-  Future<void> _generateAIInsights({bool forceRefresh = false}) async {
+  /// Load AI insights from cache (preloaded data)
+  Future<void> _loadAIInsightsFromCache({bool forceRefresh = false}) async {
     if (_goals.isEmpty) return;
 
     setState(() {
@@ -200,6 +203,11 @@ class _GoalsScreenState extends State<GoalsScreen> {
         };
       }).toList();
 
+      print(
+        '[GOALS SCREEN] Loading goal insights from cache (preloaded data)...',
+      );
+      // Only use cache unless explicitly refreshing
+      // forceRefresh is only true when user clicks the refresh button
       final result = await _aiService.getGoalInsights(
         goals: goalsData,
         totalIncome: _totalIncome,
@@ -215,10 +223,10 @@ class _GoalsScreenState extends State<GoalsScreen> {
         });
       }
     } catch (e) {
-      print('[AI ERROR] Error generating goal insights: $e');
+      print('[AI ERROR] Error loading goal insights: $e');
       if (mounted) {
         setState(() {
-          _aiInsights = 'Unable to generate AI insights at this time.';
+          _aiInsights = 'Unable to load goal insights. Please try again later.';
           _aiLoading = false;
         });
       }
@@ -499,9 +507,12 @@ class _GoalsScreenState extends State<GoalsScreen> {
                               icon: const Icon(Icons.refresh),
                               color: Colors.purple,
                               onPressed: () async {
-                                await _generateAIInsights(forceRefresh: true);
+                                // Force refresh bypasses cache
+                                await _loadAIInsightsFromCache(
+                                  forceRefresh: true,
+                                );
                               },
-                              tooltip: 'Refresh',
+                              tooltip: 'Refresh AI Insights',
                             ),
                         ],
                       ),
